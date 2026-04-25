@@ -1,0 +1,13 @@
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+
+gungi.exe
+tests/test_rules.exe
+
+build/
+out/
+.vs/
+.vscode/
