@@ -9,5 +9,6 @@ tests/test_rules.exe
 
 build/
 out/
+.deps/
 .vs/
 .vscode/

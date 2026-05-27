@@ -2,17 +2,40 @@
 
 這是一個 C99 + raylib 的軍儀棋第一版實作。規則核心在 `src/gungi_rules.c` / `src/gungi_rules.h`，raylib 畫面在 `src/main.c`，核心測試在 `tests/test_rules.c`。
 
-## 安裝需求
+## 最簡單玩法
 
-1. 安裝 raylib Windows package。
-2. 確認 `gcc` 可在命令列使用；raylib installer 常見路徑是 `C:\raylib\w64devkit\bin`。
-3. 預設 raylib 根目錄為 `C:\raylib\raylib`。如果安裝在其他位置，先設定：
+一般玩家請到 GitHub Releases 下載 `gungi.exe`，直接雙擊執行即可：
+
+https://github.com/LegendMMM/gungi/releases
+
+## 從原始碼一鍵啟動
+
+Windows 使用者下載或 clone 專案後，執行：
+
+```bat
+setup_windows.bat
+```
+
+這個腳本會自動下載可攜版 `w64devkit` 與 raylib 5.5 MinGW 套件到專案內的 `.deps`，接著建置、執行規則測試，最後啟動遊戲。
+
+只建置與測試、不啟動視窗：
+
+```bat
+setup_windows.bat --no-run
+```
+
+## 手動建置
+
+如果你已經安裝 raylib Windows package，也可以直接用既有建置腳本：
+
+1. 確認 `gcc` 可在命令列使用；raylib installer 常見路徑是 `C:\raylib\w64devkit\bin`。
+2. 預設 raylib 根目錄為 `C:\raylib\raylib`。如果安裝在其他位置，先設定：
 
 ```bat
 set RAYLIB_PATH=C:\path\to\raylib
 ```
 
-## 建置
+3. 建置：
 
 ```bat
 build.bat
@@ -22,15 +45,6 @@ build.bat
 
 - `gungi.exe`
 - `tests\test_rules.exe`
-
-如果本機沒有 gcc 或 raylib，腳本會停止並顯示缺少的項目。
-
-## 執行
-
-```bat
-gungi.exe
-tests\test_rules.exe
-```
 
 ## 操作
 
