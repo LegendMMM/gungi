@@ -45,10 +45,10 @@ static const PieceDef PIECE_DEFS[GUNGI_PIECE_TYPE_COUNT] = {
     { GUNGI_PIECE_SPY, "Spy", "Rn", 2, 0 }, // 忍
     { GUNGI_PIECE_FORT, "Fort", "Zi", 2, 0 }, // 砦
     { GUNGI_PIECE_PAWN, "Pawn", "Bi", 4, 0 }, // 兵
-    { GUNGI_PIECE_CAPTAIN, "Captain", "Xi", 2, 0 }, // 小 (小將)
-    { GUNGI_PIECE_LIEUTENANT, "Lieutenant General", "Zo", 1, 0 }, // 中 (中將)
-    { GUNGI_PIECE_MAJOR, "Major General", "Da", 1, 0 }, // 大 (大將)
-    { GUNGI_PIECE_GENERAL, "General", "Mo", 1, 0 }, // 謀
+    { GUNGI_PIECE_CAPTAIN, "Captain", "Mo", 1, 0 }, // 謀
+    { GUNGI_PIECE_LIEUTENANT, "Lieutenant General", "Zo", 1, 0 }, // 中
+    { GUNGI_PIECE_MAJOR, "Major General", "Xi", 2, 0 }, // 小
+    { GUNGI_PIECE_GENERAL, "General", "Da", 1, 0 }, // 大
     { GUNGI_PIECE_CANNON, "Cannon", "Po", 1, 1 }, // 砲
     { GUNGI_PIECE_MUSKETEER, "Musketeer", "To", 1, 1 }, // 筒
     { GUNGI_PIECE_ARCHER, "Archer", "Go", 2, 1 } // 弓
@@ -136,7 +136,7 @@ static const MovementRule ARCHER_RULES[] = {
 static const SetupPiece DEFAULT_SETUP[] = {
     { 3, 0, GUNGI_PIECE_LIEUTENANT }, // 中 (中將)
     { 4, 0, GUNGI_PIECE_MARSHAL },    // 帥
-    { 5, 0, GUNGI_PIECE_MAJOR },      // 大 (大將)
+    { 5, 0, GUNGI_PIECE_GENERAL },      // 大 (大將)
 
     // --- 第二排 (y = 1) ---
     { 1, 1, GUNGI_PIECE_KNIGHT },     // 馬
