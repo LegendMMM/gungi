@@ -68,7 +68,7 @@ static void test_initialization(void)
     CHECK(white_marshal.type == GUNGI_PIECE_MARSHAL);
     CHECK(total_owned_pieces(&state, GUNGI_PLAYER_BLACK) == 25);
     CHECK(total_owned_pieces(&state, GUNGI_PLAYER_WHITE) == 25);
-    CHECK(gungi_hand_count(&state, GUNGI_PLAYER_BLACK, GUNGI_PIECE_CAPTAIN) == 1);
+    CHECK(gungi_hand_count(&state, GUNGI_PLAYER_BLACK, GUNGI_PIECE_CAPTAIN) == 2);
     CHECK(gungi_hand_count(&state, GUNGI_PLAYER_WHITE, GUNGI_PIECE_MUSKETEER) == 1);
 }
 

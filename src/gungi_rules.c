@@ -38,20 +38,20 @@ struct GungiGame {
 
 static const PieceDef PIECE_DEFS[GUNGI_PIECE_TYPE_COUNT] = {
     { GUNGI_PIECE_NONE, "None", "--", 0, 0 },
-    { GUNGI_PIECE_MARSHAL, "Marshal", "Ma", 1, 0 },
-    { GUNGI_PIECE_SAMURAI, "Samurai", "Sa", 2, 0 },
-    { GUNGI_PIECE_SPEAR, "Spear", "Sp", 3, 0 },
-    { GUNGI_PIECE_KNIGHT, "Knight", "Kn", 2, 0 },
-    { GUNGI_PIECE_SPY, "Spy", "Sy", 2, 0 },
-    { GUNGI_PIECE_FORT, "Fort", "Fo", 2, 0 },
-    { GUNGI_PIECE_PAWN, "Pawn", "Pa", 4, 0 },
-    { GUNGI_PIECE_CAPTAIN, "Captain", "Ca", 1, 0 },
-    { GUNGI_PIECE_LIEUTENANT, "Lieutenant General", "Lt", 1, 0 },
-    { GUNGI_PIECE_MAJOR, "Major General", "Mj", 2, 0 },
-    { GUNGI_PIECE_GENERAL, "General", "Ge", 1, 0 },
-    { GUNGI_PIECE_CANNON, "Cannon", "Cn", 1, 1 },
-    { GUNGI_PIECE_MUSKETEER, "Musketeer", "Mu", 1, 1 },
-    { GUNGI_PIECE_ARCHER, "Archer", "Ar", 2, 1 }
+    { GUNGI_PIECE_MARSHAL, "Marshal", "Su", 1, 0 }, // 帥
+    { GUNGI_PIECE_SAMURAI, "Samurai", "Si", 2, 0 }, // 侍
+    { GUNGI_PIECE_SPEAR, "Spear", "Qi", 3, 0 }, // 槍
+    { GUNGI_PIECE_KNIGHT, "Knight", "Ma", 2, 0 }, // 馬
+    { GUNGI_PIECE_SPY, "Spy", "Rn", 2, 0 }, // 忍
+    { GUNGI_PIECE_FORT, "Fort", "Zi", 2, 0 }, // 砦
+    { GUNGI_PIECE_PAWN, "Pawn", "Bi", 4, 0 }, // 兵
+    { GUNGI_PIECE_CAPTAIN, "Captain", "Xi", 2, 0 }, // 小 (小將)
+    { GUNGI_PIECE_LIEUTENANT, "Lieutenant General", "Zo", 1, 0 }, // 中 (中將)
+    { GUNGI_PIECE_MAJOR, "Major General", "Da", 1, 0 }, // 大 (大將)
+    { GUNGI_PIECE_GENERAL, "General", "Mo", 1, 0 }, // 謀
+    { GUNGI_PIECE_CANNON, "Cannon", "Po", 1, 1 }, // 砲
+    { GUNGI_PIECE_MUSKETEER, "Musketeer", "To", 1, 1 }, // 筒
+    { GUNGI_PIECE_ARCHER, "Archer", "Go", 2, 1 } // 弓
 };
 
 static const MovementRule MARSHAL_RULES[] = {
@@ -134,16 +134,25 @@ static const MovementRule ARCHER_RULES[] = {
 };
 
 static const SetupPiece DEFAULT_SETUP[] = {
-    { 0, 0, GUNGI_PIECE_SPY },       { 1, 0, GUNGI_PIECE_CANNON },
-    { 2, 0, GUNGI_PIECE_GENERAL },   { 3, 0, GUNGI_PIECE_LIEUTENANT },
-    { 4, 0, GUNGI_PIECE_MARSHAL },   { 5, 0, GUNGI_PIECE_MAJOR },
-    { 6, 0, GUNGI_PIECE_FORT },      { 7, 0, GUNGI_PIECE_ARCHER },
-    { 8, 0, GUNGI_PIECE_SPY },
-    { 1, 1, GUNGI_PIECE_KNIGHT },    { 2, 1, GUNGI_PIECE_SPEAR },
-    { 3, 1, GUNGI_PIECE_SAMURAI },   { 4, 1, GUNGI_PIECE_PAWN },
-    { 5, 1, GUNGI_PIECE_SAMURAI },   { 6, 1, GUNGI_PIECE_SPEAR },
-    { 7, 1, GUNGI_PIECE_KNIGHT },
-    { 3, 2, GUNGI_PIECE_PAWN },      { 4, 2, GUNGI_PIECE_PAWN }
+    { 3, 0, GUNGI_PIECE_LIEUTENANT }, // 中 (中將)
+    { 4, 0, GUNGI_PIECE_MARSHAL },    // 帥
+    { 5, 0, GUNGI_PIECE_MAJOR },      // 大 (大將)
+
+    // --- 第二排 (y = 1) ---
+    { 1, 1, GUNGI_PIECE_KNIGHT },     // 馬
+    { 2, 1, GUNGI_PIECE_ARCHER },     // 弓
+    { 4, 1, GUNGI_PIECE_SPEAR },      // 槍
+    { 6, 1, GUNGI_PIECE_ARCHER },     // 弓
+    { 7, 1, GUNGI_PIECE_SPY },        // 忍
+
+    // --- 第三排 (y = 2) ---
+    { 0, 2, GUNGI_PIECE_PAWN },       // 兵
+    { 2, 2, GUNGI_PIECE_FORT },       // 砦
+    { 3, 2, GUNGI_PIECE_SAMURAI },    // 侍
+    { 4, 2, GUNGI_PIECE_PAWN },       // 兵
+    { 5, 2, GUNGI_PIECE_SAMURAI },    // 侍
+    { 6, 2, GUNGI_PIECE_FORT },       // 砦
+    { 8, 2, GUNGI_PIECE_PAWN }        // 兵
 };
 
 static int in_bounds(int x, int y)
@@ -843,7 +852,7 @@ void gungi_init(GameState *state)
         if (gungi_place_piece(state, GUNGI_PLAYER_BLACK, piece->type, piece->x, piece->y)) {
             state->hands[GUNGI_PLAYER_BLACK][piece->type]--;
         }
-        if (gungi_place_piece(state, GUNGI_PLAYER_WHITE, piece->type, piece->x, GUNGI_BOARD_SIZE - 1 - piece->y)) {
+        if (gungi_place_piece(state, GUNGI_PLAYER_WHITE, piece->type, GUNGI_BOARD_SIZE - 1 - piece->x, GUNGI_BOARD_SIZE - 1 - piece->y)) {
             state->hands[GUNGI_PLAYER_WHITE][piece->type]--;
         }
     }
@@ -1367,4 +1376,13 @@ const char *gungi_last_error(const GungiGame *game)
         return "No game.";
     }
     return game->last_error;
+}
+
+// --- 新增：暴露內部 GameState 給 AI 使用的通道 ---
+GameState *gungi_game_get_state(GungiGame *game)
+{
+    if (game == NULL) {
+        return NULL;
+    }
+    return &game->state;
 }

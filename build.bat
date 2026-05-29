@@ -54,7 +54,7 @@ if not exist "%ROOT%tests\test_rules.c" (
 if not exist "%ROOT%tests" mkdir "%ROOT%tests"
 
 echo Building gungi.exe...
-"%GCC%" -std=c99 -Wall -Wextra -pedantic -I"%RAYLIB_DIR%\src" -I"%ROOT%src" "%ROOT%src\main.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%gungi.exe" -L"%RAYLIB_DIR%\src" -lraylib -lopengl32 -lgdi32 -lwinmm
+"%GCC%" -std=c99 -Wall -Wextra -pedantic -I"%RAYLIB_DIR%\src" -I"%ROOT%src" "%ROOT%src\ai_core.c" "%ROOT%src\main.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%gungi.exe" -L"%RAYLIB_DIR%\src" -lraylib -lopengl32 -lgdi32 -lwinmm
 if errorlevel 1 (
     echo [error] Failed to build gungi.exe.
     exit /b 1

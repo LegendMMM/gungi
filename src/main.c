@@ -1,9 +1,12 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <stdlib.h>
 
 #include "raylib.h"
 #include "gungi_rules.h"
+#include "ai_core.h"
 
 #define WINDOW_WIDTH 1180
 #define WINDOW_HEIGHT 790
@@ -11,6 +14,7 @@
 #define HAND_WIDTH 220
 #define HAND_ROW_HEIGHT 30
 #define BUTTON_HEIGHT 32
+#define MAX_HISTORY 256
 
 typedef enum UiSourceKind {
     UI_SOURCE_NONE = 0,
@@ -40,6 +44,12 @@ typedef struct AppState {
     Rectangle action_buttons[4];
     Rectangle restart_button;
     Rectangle resign_button;
+    bool auto_play;
+
+    GameState history[MAX_HISTORY];
+    int history_count;
+    bool valid_targets[GUNGI_BOARD_SIZE][GUNGI_BOARD_SIZE];
+
 } AppState;
 
 static const Color COLOR_BG = { 29, 32, 36, 255 };
@@ -112,6 +122,8 @@ static void ClearSelection(AppState *state)
     state->selection.level = -1;
     state->selection.hand_index = -1;
     state->selection.player = (GungiPlayer)-1;
+    
+    memset(state->valid_targets, 0, sizeof(state->valid_targets));
 }
 
 static void RefreshView(AppState *state)
@@ -269,6 +281,11 @@ static void DrawBoard(const AppState *state)
             DrawRectangleRec(cell_rect, cell_color);
             DrawRectangleLinesEx(cell_rect, 1.0f, COLOR_GRID);
 
+            if (state->valid_targets[y][x]) {
+                DrawRectangleRec(cell_rect, (Color){ 46, 204, 113, 120 }); // 半透明綠色
+                DrawRectangleLinesEx(cell_rect, 2.0f, (Color){ 39, 174, 96, 255 }); // 深綠框
+            }
+
             bool selected = state->selection.kind == UI_SOURCE_BOARD &&
                             state->selection.x == x &&
                             state->selection.y == y;
@@ -417,6 +434,15 @@ static void DrawApp(AppState *state)
     EndDrawing();
 }
 
+static void SaveHistory(AppState *state) {
+    if (state->game == NULL) return;
+    GameState *internal = gungi_game_get_state(state->game);
+    if (internal != NULL && state->history_count < MAX_HISTORY) {
+        state->history[state->history_count] = *internal;
+        state->history_count++;
+    }
+}
+
 static void SubmitRequest(AppState *state, int to_x, int to_y)
 {
     if (state->selection.kind == UI_SOURCE_NONE) {
@@ -444,7 +470,16 @@ static void SubmitRequest(AppState *state, int to_x, int to_y)
         request.from_level = state->selection.level;
     }
 
+    // --- 修改：在應用移動前，先備份當前的狀態 ---
+    GameState *internal = gungi_game_get_state(state->game);
+    GameState backup;
+    if (internal) backup = *internal; // 暫存起來
+
     if (gungi_apply_request(state->game, &request)) {
+        // 如果移動被引擎接受了，就把備份正式存入歷史
+        if (internal && state->history_count < MAX_HISTORY) {
+            state->history[state->history_count++] = backup;
+        }
         SetMessage(state, TextFormat("%s accepted.", ActionName(request.action)));
         ClearSelection(state);
         RefreshView(state);
@@ -483,6 +518,25 @@ static void SelectBoardCell(AppState *state, int x, int y)
         state->action = GUNGI_ACTION_MOVE;
     }
     SetMessage(state, TextFormat("Selected board %d,%d. Choose a target.", x + 1, y + 1));
+
+    // --- 新增：計算這顆棋子的合法步數，用來畫綠色提示框 ---
+    memset(state->valid_targets, 0, sizeof(state->valid_targets));
+    GameState *internal = gungi_game_get_state(state->game);
+    
+    // 只有點擊「自己」的棋子才顯示提示
+    if (internal != NULL && state->selection.player == internal->current_player) {
+        for (int ty = 0; ty < GUNGI_BOARD_SIZE; ty++) {
+            for (int tx = 0; tx < GUNGI_BOARD_SIZE; tx++) {
+                // 產生一個假想的移動，並請引擎驗證是否合法
+                Move m = gungi_make_move(internal->current_player, x, y, tx, ty);
+                if (gungi_validate_move(internal, m).ok) {
+                    state->valid_targets[ty][tx] = true; // 如果合法，標記為 true
+                }
+            }
+        }
+    }
+
+
 }
 
 static void SelectHandEntry(AppState *state, GungiPlayer player, int hand_index)
@@ -508,6 +562,29 @@ static void HandleKeyboard(AppState *state)
         state->action = GUNGI_ACTION_NEW;
         ClearSelection(state);
         SetMessage(state, "Operation: New");
+    } else if (IsKeyPressed(KEY_A)) {
+        // --- 修正：加上括號解決警告，並透過 getter 安全取得狀態 ---
+        if (state->game != NULL && state->has_view && 
+           (state->view.status[0] == '\0' || strstr(state->view.status, "to move") != NULL)) {
+            
+            SetMessage(state, "AI is thinking...");
+            BeginDrawing(); DrawApp(state); EndDrawing(); // 強制刷新畫面顯示 Thinking...
+
+            // 透過我們新增的通道，安全地取得內部的 GameState
+            GameState *internal_state = gungi_game_get_state(state->game);
+            
+            if (internal_state != NULL) {
+                // 呼叫 AI 思考 (深度設為 2)
+                Move ai_move = gungi_get_ai_move(internal_state, 2);
+
+                SaveHistory(state);
+                // 直接將 AI 決定的步數套用進內部狀態
+                gungi_apply_move(internal_state, ai_move);
+                ClearSelection(state);
+                RefreshView(state);
+                SetMessage(state, "AI has moved.");
+            }
+        }
     } else if (IsKeyPressed(KEY_M)) {
         state->action = GUNGI_ACTION_MOVE;
         ClearSelection(state);
@@ -526,6 +603,31 @@ static void HandleKeyboard(AppState *state)
             ClearSelection(state);
             SetMessage(state, "Game restarted.");
             RefreshView(state);
+        }
+    }else if (IsKeyPressed(KEY_V)) {
+        // --- 新增：按下 V 鍵，開啟/關閉 自動對戰模式 ---
+        state->auto_play = !state->auto_play;
+        if (state->auto_play) {
+            SetMessage(state, "Auto-Battle Started! Black(Random) vs White(Minimax)");
+        } else {
+            SetMessage(state, "Auto-Battle Stopped.");
+        }
+    } else if (IsKeyPressed(KEY_Z)) {
+        // --- 新增：按下 Z 鍵發動悔棋 ---
+        if (state->history_count > 0) {
+            // 從堆疊中取出上一步的狀態
+            state->history_count--;
+            GameState *internal = gungi_game_get_state(state->game);
+            
+            if (internal != NULL) {
+                // 直接將內部狀態覆蓋回上一步
+                *internal = state->history[state->history_count];
+                ClearSelection(state);
+                RefreshView(state);
+                SetMessage(state, "Undo: Returned to the previous turn.");
+            }
+        } else {
+            SetMessage(state, "Cannot Undo: No history available.");
         }
     } else if (IsKeyPressed(KEY_ESCAPE)) {
         ClearSelection(state);
@@ -561,7 +663,9 @@ static void HandleMouse(AppState *state)
 
 int main(void)
 {
-    AppState state;
+    srand((unsigned int)time(NULL));
+    
+    static AppState state;
     memset(&state, 0, sizeof(state));
     state.action = GUNGI_ACTION_MOVE;
     ClearSelection(&state);
@@ -576,6 +680,37 @@ int main(void)
     while (!WindowShouldClose()) {
         HandleKeyboard(&state);
         HandleMouse(&state);
+
+        if (state.auto_play && state.game != NULL && state.has_view) {
+            GameState *internal_state = gungi_game_get_state(state.game);
+            
+            // 只有在遊戲進行中才自動下棋
+            if (internal_state != NULL && internal_state->status == GUNGI_STATUS_ONGOING) {
+                Move next_move;
+                
+                // 黑方使用「隨機 AI」
+                if (internal_state->current_player == GUNGI_PLAYER_BLACK) {
+                    next_move = gungi_get_random_move(internal_state);
+                } 
+                // 白方使用「Minimax AI (深度 2)」
+                else {
+                    next_move = gungi_get_ai_move(internal_state, 2);
+                }
+
+                // 執行這步棋
+                SaveHistory(&state);
+                gungi_apply_move(internal_state, next_move);
+                ClearSelection(&state);
+                RefreshView(&state);
+
+                // 如果遊戲結束，自動關閉對戰模式
+                if (internal_state->status != GUNGI_STATUS_ONGOING) {
+                    state.auto_play = false;
+                    SetMessage(&state, TextFormat("Auto-Battle Stopped! %s", state.view.status));
+                }
+            }
+        }
+
         DrawApp(&state);
     }
 

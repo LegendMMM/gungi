@@ -223,6 +223,8 @@ void gungi_set_hand(GameState *state, GungiPlayer player, GungiPieceType type, i
 void gungi_set_current_player(GameState *state, GungiPlayer player);
 
 GungiGame *gungi_create(void);
+// 取得遊戲內部的 GameState 指標 (供 AI 讀取與計算)
+GameState *gungi_game_get_state(GungiGame *game);
 void gungi_destroy(GungiGame *game);
 void gungi_reset(GungiGame *game);
 bool gungi_get_view(const GungiGame *game, GungiGameView *out_view);
