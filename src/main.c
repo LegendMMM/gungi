@@ -437,9 +437,20 @@ static void DrawApp(AppState *state)
 static void SaveHistory(AppState *state) {
     if (state->game == NULL) return;
     GameState *internal = gungi_game_get_state(state->game);
-    if (internal != NULL && state->history_count < MAX_HISTORY) {
-        state->history[state->history_count] = *internal;
-        state->history_count++;
+    
+    if (internal != NULL) {
+        if (state->history_count < MAX_HISTORY) {
+            // 情況一：空間還夠，直接存在當前的位置
+            state->history[state->history_count] = *internal;
+            state->history_count++;
+        } else {
+            // 情況二：歷史紀錄滿了 (達到 256 步)
+            // 使用 memmove 將 第 1~255 步 往前搬移到 第 0~254 步的位置 (最舊的第 0 步會被覆蓋丟棄)
+            memmove(&state->history[0], &state->history[1], sizeof(GameState) * (MAX_HISTORY - 1));
+            
+            // 將最新的一步存在陣列的最後一個位子 (索引 255)
+            state->history[MAX_HISTORY - 1] = *internal;
+        }
     }
 }
 
