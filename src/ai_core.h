@@ -8,4 +8,6 @@ Move gungi_get_ai_move(const GameState *state, int depth);
 // --- 新增：取得隨機合法步數 ---
 Move gungi_get_random_move(const GameState *state);
 
+int gungi_evaluate_board(const GameState *state);
+
 #endif

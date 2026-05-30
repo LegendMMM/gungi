@@ -34,7 +34,8 @@ typedef struct UiSelection {
 typedef enum PlayerControlType {
     CONTROL_MANUAL = 0,
     CONTROL_RANDOM_AI = 1,
-    CONTROL_MINIMAX_AI = 2
+    CONTROL_GREEDY_AI = 2,
+    CONTROL_MINIMAX_AI = 3
 } PlayerControlType;
 
 typedef struct AppState {
@@ -58,8 +59,13 @@ typedef struct AppState {
 
     PlayerControlType black_control;
     PlayerControlType white_control;
-    Rectangle black_ctrl_btns[3];
-    Rectangle white_ctrl_btns[3];
+    Rectangle black_ctrl_btns[4];
+    Rectangle white_ctrl_btns[4];
+
+    double black_ai_time;
+    int black_ai_moves;
+    double white_ai_time;
+    int white_ai_moves;
 
 } AppState;
 
@@ -168,10 +174,10 @@ static void LayoutApp(AppState *state)
     state->black_control = CONTROL_MANUAL;
     state->white_control = CONTROL_MANUAL;
     
-    for (int i = 0; i < 3; i++) {
-        // 排列在手駒面板底部 (Y 軸向下偏移 470 像素)
-        state->black_ctrl_btns[i] = (Rectangle){ state->black_hand_rect.x + 14.0f, state->black_hand_rect.y + 470.0f + (float)i * 36.0f, HAND_WIDTH - 28.0f, 30.0f };
-        state->white_ctrl_btns[i] = (Rectangle){ state->white_hand_rect.x + 14.0f, state->white_hand_rect.y + 470.0f + (float)i * 36.0f, HAND_WIDTH - 28.0f, 30.0f };
+    for (int i = 0; i < 4; i++) {
+        float btn_x_offset = 14.0f + (float)i * 50.0f;
+        state->black_ctrl_btns[i] = (Rectangle){ state->black_hand_rect.x + btn_x_offset, state->black_hand_rect.y + 470.0f, 42.0f, 30.0f };
+        state->white_ctrl_btns[i] = (Rectangle){ state->white_hand_rect.x + btn_x_offset, state->white_hand_rect.y + 470.0f, 42.0f, 30.0f };
     }
 
     float action_x = state->board_rect.x;
@@ -374,25 +380,22 @@ static void DrawHandPanel(AppState *state, GungiPlayer player, Rectangle panel)
         DrawText("No pieces", (int)(panel.x + 14.0f), (int)(panel.y + 58.0f), 18, COLOR_MUTED);
     }
 
-    // --- 新增：在最下方畫出控制切換按鈕 ---
-    const char *ctrl_labels[3] = { "Manual", "level 0 AI", "level 1 AI" };
+    const char *ctrl_labels[4] = { "M", "0", "1", "2" };
     PlayerControlType current_ctrl = (player == GUNGI_PLAYER_BLACK) ? state->black_control : state->white_control;
     Rectangle *btns = (player == GUNGI_PLAYER_BLACK) ? state->black_ctrl_btns : state->white_ctrl_btns;
 
-    // 畫出一條分隔線
-    DrawLine((int)panel.x + 10, (int)panel.y + 460, (int)(panel.x + panel.width - 10), (int)panel.y + 460, COLOR_GRID);
-
-    for (int i = 0; i < 3; i++) {
-        bool is_active = (current_ctrl == i);
-        // 若按鈕被點擊，則更新控制模式
-        if (DrawButton(btns[i], ctrl_labels[i], is_active, COLOR_ACCENT)) {
-            if (player == GUNGI_PLAYER_BLACK) {
-                state->black_control = (PlayerControlType)i;
-            } else {
-                state->white_control = (PlayerControlType)i;
-            }
+    for (int i = 0; i < 4; i++) {
+        if (DrawButton(btns[i], ctrl_labels[i], current_ctrl == (PlayerControlType)i, COLOR_ACCENT)) {
+            if (player == GUNGI_PLAYER_BLACK) state->black_control = (PlayerControlType)i;
+            else state->white_control = (PlayerControlType)i;
         }
     }
+
+    int moves = (player == GUNGI_PLAYER_BLACK) ? state->black_ai_moves : state->white_ai_moves;
+    double total_time = (player == GUNGI_PLAYER_BLACK) ? state->black_ai_time : state->white_ai_time;
+    double avg_time = (moves > 0) ? (total_time / moves) : 0.0;
+    
+    DrawText(TextFormat("Avg Think: %.3f s", avg_time), (int)panel.x + 14, (int)panel.y + 520, 18, COLOR_MUTED);
 }
 
 static void DrawHeader(AppState *state)
@@ -458,6 +461,22 @@ static void DrawStatus(const AppState *state)
              (int)(bar.y + 31.0f),
              16,
              COLOR_MUTED);
+    
+    if (state->game != NULL && state->has_view) {
+        GameState *internal = gungi_game_get_state(state->game);
+        if (internal) {
+            int eval_score = gungi_evaluate_board(internal);
+            char eval_msg[64];
+            
+            // 正分代表黑方優勢，負分代表白方優勢
+            if (eval_score > 0) snprintf(eval_msg, sizeof(eval_msg), "Advantage: Black (+%d)", eval_score);
+            else if (eval_score < 0) snprintf(eval_msg, sizeof(eval_msg), "Advantage: White (+%d)", -eval_score);
+            else snprintf(eval_msg, sizeof(eval_msg), "Advantage: Even (0)");
+
+            // 畫在狀態列的右邊
+            DrawText(eval_msg, (int)(bar.x + bar.width - 260.0f), (int)(bar.y + 18.0f), 18, COLOR_SELECTED);
+        }
+    }
 }
 
 static void DrawApp(AppState *state)
@@ -660,16 +679,15 @@ static void HandleKeyboard(AppState *state)
         if (state->game != NULL) {
             gungi_reset(state->game);
             ClearSelection(state);
+
+            state->black_ai_time = 0.0;
+            state->black_ai_moves = 0;
+            state->white_ai_time = 0.0;
+            state->white_ai_moves = 0;
+            state->history_count = 0;
+
             SetMessage(state, "Game restarted.");
             RefreshView(state);
-        }
-    }else if (IsKeyPressed(KEY_V)) {
-        // --- 新增：按下 V 鍵，開啟/關閉 自動對戰模式 ---
-        state->auto_play = !state->auto_play;
-        if (state->auto_play) {
-            SetMessage(state, "Auto-Battle Started! Black(Random) vs White(Minimax)");
-        } else {
-            SetMessage(state, "Auto-Battle Stopped.");
         }
     } else if (IsKeyPressed(KEY_Z)) {
         // --- 新增：按下 Z 鍵發動悔棋 ---
@@ -753,12 +771,29 @@ int main(void)
                     // 強制刷新畫面一次，讓玩家看到 Thinking... 與最新的盤面
                     BeginDrawing(); DrawApp(&state); EndDrawing(); 
                     
+                    clock_t start_time = clock();
                     Move next_move;
                     if (current_ctrl == CONTROL_RANDOM_AI) {
                         next_move = gungi_get_random_move(internal_state);
+                    } else if (current_ctrl == CONTROL_GREEDY_AI) {
+                        next_move = gungi_get_ai_move(internal_state, 1);
                     } else {
-                        next_move = gungi_get_ai_move(internal_state, 2); // Minimax 深度 2
+                        next_move = gungi_get_ai_move(internal_state, 2);
                     }
+
+                    clock_t end_time = clock();
+                    double time_spent = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+                    
+                    if (internal_state->current_player == GUNGI_PLAYER_BLACK) {
+                        state.black_ai_time += time_spent;
+                        state.black_ai_moves++;
+                    } else {
+                        state.white_ai_time += time_spent;
+                        state.white_ai_moves++;
+                    }
+
+                    SaveHistory(&state);
+                    gungi_apply_move(internal_state, next_move);
 
                     // 落子並存入歷史 (悔棋用)
                     SaveHistory(&state);

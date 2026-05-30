@@ -8,9 +8,9 @@
 static int get_piece_value(GungiPieceType type) {
     switch (type) {
         case GUNGI_PIECE_MARSHAL:    return 10000;
-        case GUNGI_PIECE_MAJOR:      return 900;
+        case GUNGI_PIECE_GENERAL:      return 900;
         case GUNGI_PIECE_LIEUTENANT: return 600;
-        case GUNGI_PIECE_GENERAL:    return 500;
+        case GUNGI_PIECE_MAJOR:    return 500;
         case GUNGI_PIECE_CAPTAIN:    return 400;
         case GUNGI_PIECE_SAMURAI:    return 350;
         case GUNGI_PIECE_ARCHER:     return 350;
@@ -26,7 +26,7 @@ static int get_piece_value(GungiPieceType type) {
 }
 
 // 2. 評估當前盤面對誰有利 (正分黑方優勢，負分白方優勢)
-static int evaluate_board(const GameState *state) {
+int gungi_evaluate_board(const GameState *state) {
     int score = 0;
 
     // A. 盤面上的棋子
@@ -70,8 +70,6 @@ static int evaluate_board(const GameState *state) {
             score += 1000 * (reps - 1);
         }
     }
-
-    score += (rand() % 6);
 
     return score;
 }
@@ -127,13 +125,13 @@ static int generate_legal_moves(const GameState *state, Move *moves) {
 // 4. Minimax 演算法核心 (Alpha-Beta 剪枝)
 static int minimax(GameState *state, int depth, int alpha, int beta, int maximizingPlayer) {
     if (depth == 0 || state->status != GUNGI_STATUS_ONGOING) {
-        return evaluate_board(state);
+        return gungi_evaluate_board(state) + (rand() % 6);
     }
 
     Move moves[MAX_LEGAL_MOVES];
     int count = generate_legal_moves(state, moves);
     
-    if (count == 0) return evaluate_board(state); // 無路可走
+    if (count == 0) return gungi_evaluate_board(state); // 無路可走
 
     if (maximizingPlayer) {
         int maxEval = -INT_MAX;
