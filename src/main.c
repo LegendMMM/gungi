@@ -175,7 +175,7 @@ static void LayoutApp(AppState *state)
     state->white_control = CONTROL_MANUAL;
     
     for (int i = 0; i < 4; i++) {
-        float btn_x_offset = 14.0f + (float)i * 50.0f;
+        float btn_x_offset = 14.0f + (float)i * 38.0f;
         state->black_ctrl_btns[i] = (Rectangle){ state->black_hand_rect.x + btn_x_offset, state->black_hand_rect.y + 470.0f, 42.0f, 30.0f };
         state->white_ctrl_btns[i] = (Rectangle){ state->white_hand_rect.x + btn_x_offset, state->white_hand_rect.y + 470.0f, 42.0f, 30.0f };
     }
@@ -416,6 +416,13 @@ static void DrawHeader(AppState *state)
         if (state->game != NULL) {
             gungi_reset(state->game);
             ClearSelection(state);
+
+            state->black_ai_time = 0.0;
+            state->black_ai_moves = 0;
+            state->white_ai_time = 0.0;
+            state->white_ai_moves = 0;
+            state->history_count = 0;
+
             SetMessage(state, "Game restarted.");
             RefreshView(state);
         }
@@ -475,6 +482,8 @@ static void DrawStatus(const AppState *state)
 
             // 畫在狀態列的右邊
             DrawText(eval_msg, (int)(bar.x + bar.width - 260.0f), (int)(bar.y + 18.0f), 18, COLOR_SELECTED);
+
+            DrawText(TextFormat("Current Turn: %d", state->history_count + 1), (int)(bar.x + bar.width - 450.0f), (int)(bar.y + 18.0f), 18, COLOR_TEXT);
         }
     }
 }
@@ -640,29 +649,6 @@ static void HandleKeyboard(AppState *state)
         state->action = GUNGI_ACTION_NEW;
         ClearSelection(state);
         SetMessage(state, "Operation: New");
-    } else if (IsKeyPressed(KEY_A)) {
-        // --- 修正：加上括號解決警告，並透過 getter 安全取得狀態 ---
-        if (state->game != NULL && state->has_view && 
-           (state->view.status[0] == '\0' || strstr(state->view.status, "to move") != NULL)) {
-            
-            SetMessage(state, "AI is thinking...");
-            BeginDrawing(); DrawApp(state); EndDrawing(); // 強制刷新畫面顯示 Thinking...
-
-            // 透過我們新增的通道，安全地取得內部的 GameState
-            GameState *internal_state = gungi_game_get_state(state->game);
-            
-            if (internal_state != NULL) {
-                // 呼叫 AI 思考 (深度設為 2)
-                Move ai_move = gungi_get_ai_move(internal_state, 2);
-
-                SaveHistory(state);
-                // 直接將 AI 決定的步數套用進內部狀態
-                gungi_apply_move(internal_state, ai_move);
-                ClearSelection(state);
-                RefreshView(state);
-                SetMessage(state, "AI has moved.");
-            }
-        }
     } else if (IsKeyPressed(KEY_M)) {
         state->action = GUNGI_ACTION_MOVE;
         ClearSelection(state);
@@ -706,7 +692,7 @@ static void HandleKeyboard(AppState *state)
         } else {
             SetMessage(state, "Cannot Undo: No history available.");
         }
-    } else if (IsKeyPressed(KEY_ESCAPE)) {
+    } else if (IsKeyPressed(KEY_X)) {
         ClearSelection(state);
         SetMessage(state, "Selection cleared.");
     }
@@ -777,7 +763,7 @@ int main(void)
                         next_move = gungi_get_random_move(internal_state);
                     } else if (current_ctrl == CONTROL_GREEDY_AI) {
                         next_move = gungi_get_ai_move(internal_state, 1);
-                    } else {
+                    } else if (current_ctrl == CONTROL_MINIMAX_AI) {
                         next_move = gungi_get_ai_move(internal_state, 2);
                     }
 
@@ -792,8 +778,6 @@ int main(void)
                         state.white_ai_moves++;
                     }
 
-                    SaveHistory(&state);
-                    gungi_apply_move(internal_state, next_move);
 
                     // 落子並存入歷史 (悔棋用)
                     SaveHistory(&state);
