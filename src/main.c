@@ -570,7 +570,7 @@ static void SelectBoardCell(AppState *state, int x, int y)
     }
     SetMessage(state, TextFormat("Selected board %d,%d. Choose a target.", x + 1, y + 1));
 
-    // --- 新增：計算這顆棋子的合法步數，用來畫綠色提示框 ---
+    // --- 修改：計算這顆棋子的合法步數，包含移動、疊棋與吃子 ---
     memset(state->valid_targets, 0, sizeof(state->valid_targets));
     GameState *internal = gungi_game_get_state(state->game);
     
@@ -578,10 +578,18 @@ static void SelectBoardCell(AppState *state, int x, int y)
     if (internal != NULL && state->selection.player == internal->current_player) {
         for (int ty = 0; ty < GUNGI_BOARD_SIZE; ty++) {
             for (int tx = 0; tx < GUNGI_BOARD_SIZE; tx++) {
-                // 產生一個假想的移動，並請引擎驗證是否合法
-                Move m = gungi_make_move(internal->current_player, x, y, tx, ty);
-                if (gungi_validate_move(internal, m).ok) {
-                    state->valid_targets[ty][tx] = true; // 如果合法，標記為 true
+                
+                // 產生三種假想的動作
+                Move m1 = gungi_make_move(internal->current_player, x, y, tx, ty);
+                Move m2 = gungi_make_stack_move(internal->current_player, x, y, tx, ty);
+                Move m3 = gungi_make_capture_move(internal->current_player, x, y, tx, ty);
+                
+                // 只要這三個動作有任何一個是合法的，就把這個格子亮起綠框
+                if (gungi_validate_move(internal, m1).ok || 
+                    gungi_validate_move(internal, m2).ok || 
+                    gungi_validate_move(internal, m3).ok) {
+                    
+                    state->valid_targets[ty][tx] = true;
                 }
             }
         }

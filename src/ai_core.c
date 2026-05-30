@@ -89,9 +89,17 @@ static int generate_legal_moves(const GameState *state, Move *moves) {
                 if (top.owner == player) {
                     for (int ty = 0; ty < GUNGI_BOARD_SIZE; ty++) {
                         for (int tx = 0; tx < GUNGI_BOARD_SIZE; tx++) {
-                            Move m = gungi_make_move(player, x, y, tx, ty);
-                            if (gungi_validate_move(state, m).ok) {
-                                moves[count++] = m;
+                            Move m_move = gungi_make_move(player, x, y, tx, ty);
+                            if (gungi_validate_move(state, m_move).ok) {
+                                moves[count++] = m_move;
+                            }
+                            Move m_stack = gungi_make_stack_move(player, x, y, tx, ty);
+                            if (gungi_validate_move(state, m_stack).ok) {
+                                moves[count++] = m_stack;
+                            }
+                            Move m_cap = gungi_make_capture_move(player, x, y, tx, ty);
+                            if (gungi_validate_move(state, m_cap).ok) {
+                                moves[count++] = m_cap;
                             }
                         }
                     }
