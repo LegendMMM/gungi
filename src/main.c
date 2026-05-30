@@ -31,6 +31,12 @@ typedef struct UiSelection {
     GungiPlayer player;
 } UiSelection;
 
+typedef enum PlayerControlType {
+    CONTROL_MANUAL = 0,
+    CONTROL_RANDOM_AI = 1,
+    CONTROL_MINIMAX_AI = 2
+} PlayerControlType;
+
 typedef struct AppState {
     GungiGame *game;
     GungiGameView view;
@@ -49,6 +55,11 @@ typedef struct AppState {
     GameState history[MAX_HISTORY];
     int history_count;
     bool valid_targets[GUNGI_BOARD_SIZE][GUNGI_BOARD_SIZE];
+
+    PlayerControlType black_control;
+    PlayerControlType white_control;
+    Rectangle black_ctrl_btns[3];
+    Rectangle white_ctrl_btns[3];
 
 } AppState;
 
@@ -153,6 +164,15 @@ static void LayoutApp(AppState *state)
     state->black_hand_rect = (Rectangle){ 24.0f, 92.0f, HAND_WIDTH, 590.0f };
     state->board_rect = (Rectangle){ 302.0f, 92.0f, CELL_SIZE * GUNGI_BOARD_SIZE, CELL_SIZE * GUNGI_BOARD_SIZE };
     state->white_hand_rect = (Rectangle){ 936.0f, 92.0f, HAND_WIDTH, 590.0f };
+
+    state->black_control = CONTROL_MANUAL;
+    state->white_control = CONTROL_MANUAL;
+    
+    for (int i = 0; i < 3; i++) {
+        // 排列在手駒面板底部 (Y 軸向下偏移 470 像素)
+        state->black_ctrl_btns[i] = (Rectangle){ state->black_hand_rect.x + 14.0f, state->black_hand_rect.y + 470.0f + (float)i * 36.0f, HAND_WIDTH - 28.0f, 30.0f };
+        state->white_ctrl_btns[i] = (Rectangle){ state->white_hand_rect.x + 14.0f, state->white_hand_rect.y + 470.0f + (float)i * 36.0f, HAND_WIDTH - 28.0f, 30.0f };
+    }
 
     float action_x = state->board_rect.x;
     const char *labels[] = { "New", "Move", "Capture", "Stack" };
@@ -319,7 +339,7 @@ static void DrawBoard(const AppState *state)
     }
 }
 
-static void DrawHandPanel(const AppState *state, GungiPlayer player, Rectangle panel)
+static void DrawHandPanel(AppState *state, GungiPlayer player, Rectangle panel)
 {
     int player_index = (int)player;
     bool active = state->has_view && state->view.current_player == player;
@@ -352,6 +372,26 @@ static void DrawHandPanel(const AppState *state, GungiPlayer player, Rectangle p
 
     if (count == 0) {
         DrawText("No pieces", (int)(panel.x + 14.0f), (int)(panel.y + 58.0f), 18, COLOR_MUTED);
+    }
+
+    // --- 新增：在最下方畫出控制切換按鈕 ---
+    const char *ctrl_labels[3] = { "Manual", "level 0 AI", "level 1 AI" };
+    PlayerControlType current_ctrl = (player == GUNGI_PLAYER_BLACK) ? state->black_control : state->white_control;
+    Rectangle *btns = (player == GUNGI_PLAYER_BLACK) ? state->black_ctrl_btns : state->white_ctrl_btns;
+
+    // 畫出一條分隔線
+    DrawLine((int)panel.x + 10, (int)panel.y + 460, (int)(panel.x + panel.width - 10), (int)panel.y + 460, COLOR_GRID);
+
+    for (int i = 0; i < 3; i++) {
+        bool is_active = (current_ctrl == i);
+        // 若按鈕被點擊，則更新控制模式
+        if (DrawButton(btns[i], ctrl_labels[i], is_active, COLOR_ACCENT)) {
+            if (player == GUNGI_PLAYER_BLACK) {
+                state->black_control = (PlayerControlType)i;
+            } else {
+                state->white_control = (PlayerControlType)i;
+            }
+        }
     }
 }
 
@@ -692,32 +732,31 @@ int main(void)
         HandleKeyboard(&state);
         HandleMouse(&state);
 
-        if (state.auto_play && state.game != NULL && state.has_view) {
+        if (state.game != NULL && state.has_view) {
             GameState *internal_state = gungi_game_get_state(state.game);
             
-            // 只有在遊戲進行中才自動下棋
             if (internal_state != NULL && internal_state->status == GUNGI_STATUS_ONGOING) {
-                Move next_move;
+                // 判斷當前輪到的玩家，它的控制模式是什麼？
+                PlayerControlType current_ctrl = (internal_state->current_player == GUNGI_PLAYER_BLACK) ? state.black_control : state.white_control;
                 
-                // 黑方使用「隨機 AI」
-                if (internal_state->current_player == GUNGI_PLAYER_BLACK) {
-                    next_move = gungi_get_random_move(internal_state);
-                } 
-                // 白方使用「Minimax AI (深度 2)」
-                else {
-                    next_move = gungi_get_ai_move(internal_state, 2);
-                }
+                // 如果不是手動模式，代表該 AI 出手了
+                if (current_ctrl != CONTROL_MANUAL) {
+                    SetMessage(&state, TextFormat("%s AI is thinking...", PlayerName(internal_state->current_player)));
+                    // 強制刷新畫面一次，讓玩家看到 Thinking... 與最新的盤面
+                    BeginDrawing(); DrawApp(&state); EndDrawing(); 
+                    
+                    Move next_move;
+                    if (current_ctrl == CONTROL_RANDOM_AI) {
+                        next_move = gungi_get_random_move(internal_state);
+                    } else {
+                        next_move = gungi_get_ai_move(internal_state, 2); // Minimax 深度 2
+                    }
 
-                // 執行這步棋
-                SaveHistory(&state);
-                gungi_apply_move(internal_state, next_move);
-                ClearSelection(&state);
-                RefreshView(&state);
-
-                // 如果遊戲結束，自動關閉對戰模式
-                if (internal_state->status != GUNGI_STATUS_ONGOING) {
-                    state.auto_play = false;
-                    SetMessage(&state, TextFormat("Auto-Battle Stopped! %s", state.view.status));
+                    // 落子並存入歷史 (悔棋用)
+                    SaveHistory(&state);
+                    gungi_apply_move(internal_state, next_move);
+                    ClearSelection(&state);
+                    RefreshView(&state);
                 }
             }
         }
