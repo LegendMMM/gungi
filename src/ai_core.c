@@ -94,6 +94,14 @@ static int generate_legal_moves(const GameState *state, Move *moves) {
                             Move m_stack = gungi_make_stack_move(player, x, y, tx, ty);
                             if (gungi_validate_move(state, m_stack).ok) {
                                 moves[count++] = m_stack;
+                                // 如果移動的這顆棋子是「謀」，我們就額外產生 3 種帶有寢返遮罩的平行時空走法
+                                if (top.type == GUNGI_PIECE_CAPTAIN) {
+                                    for (int mask = 1; mask <= 3; mask++) {
+                                        Move m_betray = m_stack;
+                                        m_betray.betray_mask = mask; // 分別產生 L1(1), L2(2), L1+L2(3) 的選項
+                                        moves[count++] = m_betray;
+                                    }
+                                }
                             }
                             Move m_cap = gungi_make_capture_move(player, x, y, tx, ty);
                             if (gungi_validate_move(state, m_cap).ok) {
@@ -114,6 +122,14 @@ static int generate_legal_moves(const GameState *state, Move *moves) {
                     Move m = gungi_make_drop(player, (GungiPieceType)type, tx, ty);
                     if (gungi_validate_move(state, m).ok) {
                         moves[count++] = m;
+                        // 如果打入的這顆棋子是「謀」，同樣產生 3 種寢返選項
+                        if (type == GUNGI_PIECE_CAPTAIN) {
+                            for (int mask = 1; mask <= 3; mask++) {
+                                Move m_betray = m;
+                                m_betray.betray_mask = mask;
+                                moves[count++] = m_betray;
+                            }
+                        }
                     }
                 }
             }
