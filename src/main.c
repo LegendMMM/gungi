@@ -60,6 +60,7 @@ typedef struct AppState {
 
     GameState history[MAX_HISTORY];
     int history_count;
+    int total_turns;
     bool valid_targets[GUNGI_BOARD_SIZE][GUNGI_BOARD_SIZE];
 
     PlayerControlType black_control;
@@ -437,6 +438,7 @@ static void DrawHeader(AppState *state)
             state->white_ai_time = 0.0;
             state->white_ai_moves = 0;
             state->history_count = 0;
+            state->total_turns = 0;
 
             SetMessage(state, "Game restarted.");
             RefreshView(state);
@@ -512,7 +514,7 @@ static void DrawStatus(const AppState *state)
             // 畫在狀態列的右邊
             DrawText(eval_msg, (int)(bar.x + bar.width - 260.0f), (int)(bar.y + 18.0f), 18, COLOR_SELECTED);
 
-            DrawText(TextFormat("Current Turn: %d", state->history_count + 1), (int)(bar.x + bar.width - 450.0f), (int)(bar.y + 18.0f), 18, COLOR_TEXT);
+            DrawText(TextFormat("Current Turn: %d", state->total_turns + 1), (int)(bar.x + bar.width - 450.0f), (int)(bar.y + 18.0f), 18, COLOR_TEXT);
         }
     }
 }
@@ -594,6 +596,7 @@ static void SubmitRequest(AppState *state, int to_x, int to_y)
         if (internal && state->history_count < MAX_HISTORY) {
             state->history[state->history_count++] = backup;
         }
+        state->total_turns++;
         SetMessage(state, TextFormat("%s accepted.", ActionName(request.action)));
         ClearSelection(state);
         RefreshView(state);
@@ -706,6 +709,7 @@ static void HandleKeyboard(AppState *state)
             state->white_ai_time = 0.0;
             state->white_ai_moves = 0;
             state->history_count = 0;
+            state->total_turns = 0;
 
             SetMessage(state, "Game restarted.");
             RefreshView(state);
@@ -715,6 +719,7 @@ static void HandleKeyboard(AppState *state)
         if (state->history_count > 0) {
             // 從堆疊中取出上一步的狀態
             state->history_count--;
+            state->total_turns--;
             GameState *internal = gungi_game_get_state(state->game);
             
             if (internal != NULL) {
@@ -817,6 +822,7 @@ int main(void)
                     // 落子並存入歷史 (悔棋用)
                     SaveHistory(&state);
                     gungi_apply_move(internal_state, next_move);
+                    state.total_turns++;
                     ClearSelection(&state);
                     RefreshView(&state);
                 }
