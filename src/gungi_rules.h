@@ -127,6 +127,7 @@ typedef struct Move {
     int to_y;
     GungiPieceType drop_type;
     GungiMoveIntent intent;
+    int betray_mask;
 } Move;
 
 typedef struct RulesResult {
@@ -187,6 +188,7 @@ typedef struct GungiMoveRequest {
     int to_x;
     int to_y;
     int hand_index;
+    int betray_mask;
 } GungiMoveRequest;
 
 typedef struct GungiGame GungiGame;

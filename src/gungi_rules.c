@@ -671,6 +671,24 @@ static void execute_drop_unchecked(GameState *state, Move move)
 
     piece.type = move.drop_type;
     piece.owner = move.player;
+
+    
+    if (move.betray_mask > 0 && piece.type == GUNGI_PIECE_CAPTAIN) {
+        for (int i = 0; i < 2; i++) {
+            if ((move.betray_mask & (1 << i)) && i < dest->height) {
+                // 如果該層的棋子是對手的
+                if (dest->stack[i].owner != move.player) {
+                    GungiPieceType b_type = dest->stack[i].type;
+                    // 且自己手上有對應的棋子可以消耗
+                    if (state->hands[move.player][b_type] > 0) {
+                        state->hands[move.player][b_type]--; // 扣除手駒
+                        dest->stack[i].owner = move.player;  // 棋子換色倒戈！
+                    }
+                }
+            }
+        }
+    }
+
     push_piece(dest, piece);
     state->hands[move.player][move.drop_type]--;
 }
@@ -699,6 +717,22 @@ static void execute_normal_unchecked(GameState *state, Move move, RulesResult *r
         }
         push_piece(dest, moving);
         return;
+    }
+
+    if (intent == GUNGI_INTENT_STACK && move.betray_mask > 0 && moving.type == GUNGI_PIECE_CAPTAIN) {
+        for (int i = 0; i < 2; i++) {
+            if ((move.betray_mask & (1 << i)) && i < dest->height) {
+                // 如果該層的棋子是對手的
+                if (dest->stack[i].owner != move.player) {
+                    GungiPieceType b_type = dest->stack[i].type;
+                    // 且自己手上有對應的棋子可以消耗
+                    if (state->hands[move.player][b_type] > 0) {
+                        state->hands[move.player][b_type]--; // 扣除手駒
+                        dest->stack[i].owner = move.player;  // 棋子換色倒戈！
+                    }
+                }
+            }
+        }
     }
 
     push_piece(dest, moving);
@@ -944,6 +978,7 @@ Move gungi_make_move(GungiPlayer player, int from_x, int from_y, int to_x, int t
     move.to_y = to_y;
     move.drop_type = GUNGI_PIECE_NONE;
     move.intent = GUNGI_INTENT_AUTO;
+    move.betray_mask = 0;
     return move;
 }
 
@@ -951,6 +986,7 @@ Move gungi_make_stack_move(GungiPlayer player, int from_x, int from_y, int to_x,
 {
     Move move = gungi_make_move(player, from_x, from_y, to_x, to_y);
     move.intent = GUNGI_INTENT_STACK;
+    move.betray_mask = 0;
     return move;
 }
 
@@ -958,6 +994,7 @@ Move gungi_make_capture_move(GungiPlayer player, int from_x, int from_y, int to_
 {
     Move move = gungi_make_move(player, from_x, from_y, to_x, to_y);
     move.intent = GUNGI_INTENT_CAPTURE;
+    move.betray_mask = 0;
     return move;
 }
 
@@ -973,6 +1010,7 @@ Move gungi_make_drop(GungiPlayer player, GungiPieceType type, int to_x, int to_y
     move.to_y = to_y;
     move.drop_type = type;
     move.intent = GUNGI_INTENT_AUTO;
+    move.betray_mask = 0;
     return move;
 }
 
@@ -988,6 +1026,7 @@ Move gungi_make_resign(GungiPlayer player)
     move.to_y = -1;
     move.drop_type = GUNGI_PIECE_NONE;
     move.intent = GUNGI_INTENT_AUTO;
+    move.betray_mask = 0;
     return move;
 }
 
@@ -1320,6 +1359,7 @@ bool gungi_apply_request(GungiGame *game, const GungiMoveRequest *request)
             return false;
         }
         move = gungi_make_drop(request->player, type, request->to_x, request->to_y);
+        move.betray_mask = request->betray_mask;
         break;
     }
     case GUNGI_ACTION_CAPTURE:
@@ -1327,6 +1367,7 @@ bool gungi_apply_request(GungiGame *game, const GungiMoveRequest *request)
         break;
     case GUNGI_ACTION_STACK:
         move = gungi_make_stack_move(request->player, request->from_x, request->from_y, request->to_x, request->to_y);
+        move.betray_mask = request->betray_mask;
         break;
     case GUNGI_ACTION_MOVE:
         move = gungi_make_move(request->player, request->from_x, request->from_y, request->to_x, request->to_y);

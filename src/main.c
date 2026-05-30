@@ -48,10 +48,15 @@ typedef struct AppState {
     Rectangle board_rect;
     Rectangle black_hand_rect;
     Rectangle white_hand_rect;
-    Rectangle action_buttons[4];
+    Rectangle action_buttons[5];
     Rectangle restart_button;
     Rectangle resign_button;
     bool auto_play;
+
+    bool betray_layer0; 
+    bool betray_layer1; 
+    Rectangle toggle_l0_btn;
+    Rectangle toggle_l1_btn;
 
     GameState history[MAX_HISTORY];
     int history_count;
@@ -181,9 +186,9 @@ static void LayoutApp(AppState *state)
     }
 
     float action_x = state->board_rect.x;
-    const char *labels[] = { "New", "Move", "Capture", "Stack" };
+    const char *labels[] = { "New", "Move", "Capture", "Stack", "Betrayal" };
     (void)labels;
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         state->action_buttons[i] = (Rectangle){
             action_x + (float)i * 116.0f,
             36.0f,
@@ -191,6 +196,10 @@ static void LayoutApp(AppState *state)
             BUTTON_HEIGHT
         };
     }
+
+    float betray_x = state->action_buttons[4].x + state->action_buttons[4].width + 12.0f;
+    state->toggle_l0_btn = (Rectangle){ betray_x, 32.0f, 18.0f, 18.0f };
+    state->toggle_l1_btn = (Rectangle){ betray_x, 52.0f, 18.0f, 18.0f };
 
     state->restart_button = (Rectangle){ 930.0f, 36.0f, 100.0f, BUTTON_HEIGHT };
     state->resign_button = (Rectangle){ 1042.0f, 36.0f, 96.0f, BUTTON_HEIGHT };
@@ -403,12 +412,18 @@ static void DrawHeader(AppState *state)
     DrawText("Gungi", 24, 32, 30, COLOR_TEXT);
     DrawText(TextFormat("Turn: %s", PlayerName(state->view.current_player)), 24, 64, 18, COLOR_MUTED);
 
-    for (int i = 0; i < 4; i++) {
-        GungiActionType action = (GungiActionType)i;
-        if (DrawButton(state->action_buttons[i], ActionName(action), state->action == action, COLOR_ACCENT)) {
-            state->action = action;
-            ClearSelection(state);
-            SetMessage(state, TextFormat("Operation: %s", ActionName(action)));
+    const char *labels[] = { "New", "Move", "Capture", "Stack", "Betrayal" };
+    for (int i = 0; i < 5; i++) {
+        if (i == 4) {
+            // 第 5 個按鈕 (Betrayal) 只是純視覺標示，沒有功能，用 COLOR_MUTED 畫成暗色
+            DrawButton(state->action_buttons[i], labels[i], false, COLOR_MUTED);
+        } else {
+            GungiActionType action = (GungiActionType)i;
+            if (DrawButton(state->action_buttons[i], labels[i], state->action == action, COLOR_ACCENT)) {
+                state->action = action;
+                ClearSelection(state);
+                SetMessage(state, TextFormat("Operation: %s", ActionName(action)));
+            }
         }
     }
 
@@ -440,6 +455,20 @@ static void DrawHeader(AppState *state)
             }
         }
     }
+
+    Vector2 mouse = GetMousePosition();
+    if (CheckCollisionPointRec(mouse, state->toggle_l0_btn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) state->betray_layer0 = !state->betray_layer0;
+    if (CheckCollisionPointRec(mouse, state->toggle_l1_btn) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) state->betray_layer1 = !state->betray_layer1;
+    
+    DrawRectangleRec(state->toggle_l0_btn, state->betray_layer0 ? COLOR_ACCENT : COLOR_PANEL);
+    DrawRectangleLinesEx(state->toggle_l0_btn, 1.0f, COLOR_GRID);
+    DrawRectangle((int)state->toggle_l0_btn.x + 4, (int)state->toggle_l0_btn.y + 4, 10, 10, state->betray_layer0 ? COLOR_TEXT : COLOR_BG);
+    DrawText("L1", (int)state->toggle_l0_btn.x + 20, (int)state->toggle_l0_btn.y + 3, 14, COLOR_TEXT);
+
+    DrawRectangleRec(state->toggle_l1_btn, state->betray_layer1 ? COLOR_ACCENT : COLOR_PANEL);
+    DrawRectangleLinesEx(state->toggle_l1_btn, 1.0f, COLOR_GRID);
+    DrawRectangle((int)state->toggle_l1_btn.x + 4, (int)state->toggle_l1_btn.y + 4, 10, 10, state->betray_layer1 ? COLOR_TEXT : COLOR_BG);
+    DrawText("L2", (int)state->toggle_l1_btn.x + 20, (int)state->toggle_l1_btn.y + 3, 14, COLOR_TEXT);
 }
 
 static void DrawStatus(const AppState *state)
@@ -538,6 +567,12 @@ static void SubmitRequest(AppState *state, int to_x, int to_y)
     request.to_x = to_x;
     request.to_y = to_y;
     request.hand_index = -1;
+
+    request.betray_mask = 0;
+    if (request.action == GUNGI_ACTION_NEW || request.action == GUNGI_ACTION_STACK) {
+        if (state->betray_layer0) request.betray_mask |= 1;
+        if (state->betray_layer1) request.betray_mask |= 2;
+    }
 
     if (state->selection.kind == UI_SOURCE_HAND) {
         request.action = GUNGI_ACTION_NEW;
