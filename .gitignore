@@ -6,6 +6,8 @@
 
 gungi.exe
 tests/test_rules.exe
+gungi
+tests/test_rules
 
 build/
 out/

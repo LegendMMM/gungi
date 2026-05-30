@@ -15,6 +15,11 @@
 #define HAND_ROW_HEIGHT 30
 #define BUTTON_HEIGHT 32
 #define MAX_HISTORY 256
+#define TARGET_MOVE 1
+#define TARGET_CAPTURE 2
+#define TARGET_STACK 4
+
+typedef unsigned char UiTargetFlags;
 
 typedef enum UiSourceKind {
     UI_SOURCE_NONE = 0,
@@ -61,7 +66,8 @@ typedef struct AppState {
     GameState history[MAX_HISTORY];
     int history_count;
     int total_turns;
-    bool valid_targets[GUNGI_BOARD_SIZE][GUNGI_BOARD_SIZE];
+    UiTargetFlags valid_targets[GUNGI_BOARD_SIZE][GUNGI_BOARD_SIZE];
+    int target_count;
 
     PlayerControlType black_control;
     PlayerControlType white_control;
@@ -145,6 +151,7 @@ static void ClearSelection(AppState *state)
     state->selection.level = -1;
     state->selection.hand_index = -1;
     state->selection.player = (GungiPlayer)-1;
+    state->target_count = 0;
     
     memset(state->valid_targets, 0, sizeof(state->valid_targets));
 }
@@ -261,6 +268,130 @@ static bool PointToHandEntry(const AppState *state, Vector2 point, GungiPlayer p
     return false;
 }
 
+static bool CellHasCurrentPlayerTop(const AppState *state, int x, int y)
+{
+    const GungiCellView *cell;
+    int top;
+
+    if (state == NULL || !state->has_view || x < 0 || x >= GUNGI_BOARD_SIZE || y < 0 || y >= GUNGI_BOARD_SIZE) {
+        return false;
+    }
+
+    cell = &state->view.board[y][x];
+    if (cell->height <= 0) {
+        return false;
+    }
+
+    top = cell->height - 1;
+    if (top >= GUNGI_MAX_STACK) {
+        top = GUNGI_MAX_STACK - 1;
+    }
+
+    return cell->stack[top].owner == state->view.current_player;
+}
+
+static UiTargetFlags BoardTargetFlags(const GameState *internal, GungiPlayer player, int from_x, int from_y, int to_x, int to_y)
+{
+    UiTargetFlags flags = 0;
+    int target_height;
+
+    if (internal == NULL) {
+        return 0;
+    }
+
+    target_height = gungi_cell_height(internal, to_x, to_y);
+    if (target_height <= 0) {
+        Move move = gungi_make_move(player, from_x, from_y, to_x, to_y);
+        if (gungi_validate_move(internal, move).ok) {
+            flags |= TARGET_MOVE;
+        }
+        return flags;
+    }
+
+    {
+        Move capture = gungi_make_capture_move(player, from_x, from_y, to_x, to_y);
+        if (gungi_validate_move(internal, capture).ok) {
+            flags |= TARGET_CAPTURE;
+        }
+    }
+
+    {
+        Move stack = gungi_make_stack_move(player, from_x, from_y, to_x, to_y);
+        if (gungi_validate_move(internal, stack).ok) {
+            flags |= TARGET_STACK;
+        }
+    }
+
+    return flags;
+}
+
+static int ComputeBoardTargets(AppState *state, int from_x, int from_y)
+{
+    GameState *internal = gungi_game_get_state(state->game);
+    int count = 0;
+
+    memset(state->valid_targets, 0, sizeof(state->valid_targets));
+    state->target_count = 0;
+
+    if (internal == NULL) {
+        return 0;
+    }
+
+    for (int ty = 0; ty < GUNGI_BOARD_SIZE; ty++) {
+        for (int tx = 0; tx < GUNGI_BOARD_SIZE; tx++) {
+            UiTargetFlags flags = BoardTargetFlags(internal, internal->current_player, from_x, from_y, tx, ty);
+            state->valid_targets[ty][tx] = flags;
+            if (flags != 0) {
+                count++;
+            }
+        }
+    }
+
+    state->target_count = count;
+    return count;
+}
+
+static bool TargetSupportsAction(UiTargetFlags flags, GungiActionType action)
+{
+    if (action == GUNGI_ACTION_MOVE) {
+        return (flags & TARGET_MOVE) != 0;
+    }
+    if (action == GUNGI_ACTION_CAPTURE) {
+        return (flags & TARGET_CAPTURE) != 0;
+    }
+    if (action == GUNGI_ACTION_STACK) {
+        return (flags & TARGET_STACK) != 0;
+    }
+    return false;
+}
+
+static GungiActionType PreferredTargetAction(const AppState *state, int to_x, int to_y)
+{
+    UiTargetFlags flags = state->valid_targets[to_y][to_x];
+
+    if (TargetSupportsAction(flags, state->action)) {
+        return state->action;
+    }
+    if ((flags & TARGET_CAPTURE) != 0) {
+        return GUNGI_ACTION_CAPTURE;
+    }
+    if ((flags & TARGET_STACK) != 0) {
+        return GUNGI_ACTION_STACK;
+    }
+    return GUNGI_ACTION_MOVE;
+}
+
+static Color TargetHintColor(UiTargetFlags flags)
+{
+    if ((flags & TARGET_CAPTURE) != 0) {
+        return (Color){ 213, 74, 69, 128 };
+    }
+    if ((flags & TARGET_STACK) != 0) {
+        return (Color){ 245, 185, 66, 128 };
+    }
+    return (Color){ 74, 144, 226, 128 };
+}
+
 static void DrawCenteredText(const char *text, Rectangle rect, int font_size, Color color)
 {
     int width = MeasureText(text, font_size);
@@ -317,9 +448,27 @@ static void DrawBoard(const AppState *state)
             DrawRectangleRec(cell_rect, cell_color);
             DrawRectangleLinesEx(cell_rect, 1.0f, COLOR_GRID);
 
-            if (state->valid_targets[y][x]) {
-                DrawRectangleRec(cell_rect, (Color){ 46, 204, 113, 120 }); // 半透明綠色
-                DrawRectangleLinesEx(cell_rect, 2.0f, (Color){ 39, 174, 96, 255 }); // 深綠框
+            if (state->valid_targets[y][x] != 0) {
+                UiTargetFlags flags = state->valid_targets[y][x];
+                Color hint = TargetHintColor(flags);
+                DrawRectangleRec(cell_rect, hint);
+                DrawRectangleLinesEx(cell_rect, 2.0f, (Color){ hint.r, hint.g, hint.b, 255 });
+
+                if ((flags & (flags - 1)) != 0) {
+                    float dot_x = cell_rect.x + 12.0f;
+                    float dot_y = cell_rect.y + cell_rect.height - 10.0f;
+                    if ((flags & TARGET_MOVE) != 0) {
+                        DrawCircleV((Vector2){ dot_x, dot_y }, 4.0f, (Color){ 74, 144, 226, 255 });
+                        dot_x += 12.0f;
+                    }
+                    if ((flags & TARGET_CAPTURE) != 0) {
+                        DrawCircleV((Vector2){ dot_x, dot_y }, 4.0f, (Color){ 213, 74, 69, 255 });
+                        dot_x += 12.0f;
+                    }
+                    if ((flags & TARGET_STACK) != 0) {
+                        DrawCircleV((Vector2){ dot_x, dot_y }, 4.0f, (Color){ 245, 185, 66, 255 });
+                    }
+                }
             }
 
             bool selected = state->selection.kind == UI_SOURCE_BOARD &&
@@ -408,6 +557,15 @@ static void DrawHandPanel(AppState *state, GungiPlayer player, Rectangle panel)
     DrawText(TextFormat("Avg Think: %.3f s", avg_time), (int)panel.x + 14, (int)panel.y + 520, 18, COLOR_MUTED);
 }
 
+static void SetActionMode(AppState *state, GungiActionType action)
+{
+    state->action = action;
+    if (action == GUNGI_ACTION_NEW || state->selection.kind == UI_SOURCE_HAND) {
+        ClearSelection(state);
+    }
+    SetMessage(state, TextFormat("Operation: %s", ActionName(action)));
+}
+
 static void DrawHeader(AppState *state)
 {
     DrawText("Gungi", 24, 32, 30, COLOR_TEXT);
@@ -421,9 +579,7 @@ static void DrawHeader(AppState *state)
         } else {
             GungiActionType action = (GungiActionType)i;
             if (DrawButton(state->action_buttons[i], labels[i], state->action == action, COLOR_ACCENT)) {
-                state->action = action;
-                ClearSelection(state);
-                SetMessage(state, TextFormat("Operation: %s", ActionName(action)));
+                SetActionMode(state, action);
             }
         }
     }
@@ -487,12 +643,12 @@ static void DrawStatus(const AppState *state)
         snprintf(selection, sizeof(selection), "Selection: %s hand slot %d",
                  PlayerName(state->selection.player), state->selection.hand_index + 1);
     } else if (state->selection.kind == UI_SOURCE_BOARD) {
-        snprintf(selection, sizeof(selection), "Selection: board %d,%d level %d",
-                 state->selection.x + 1, state->selection.y + 1, state->selection.level + 1);
+        snprintf(selection, sizeof(selection), "Selection: board %d,%d level %d | targets: %d",
+                 state->selection.x + 1, state->selection.y + 1, state->selection.level + 1, state->target_count);
     }
 
     char prompt[192];
-    snprintf(prompt, sizeof(prompt), "Operation: %s | %s | Keys: N/M/C/S, R restart, Esc clear",
+    snprintf(prompt, sizeof(prompt), "Operation: %s | %s | Keys: N/M/C/S, R restart, Esc/X clear",
              ActionName(state->action), selection);
     DrawText(prompt,
              (int)(bar.x + 16.0f),
@@ -553,6 +709,34 @@ static void SaveHistory(AppState *state) {
     }
 }
 
+static void SelectBoardPiece(AppState *state, int x, int y)
+{
+    const GungiCellView *cell = &state->view.board[y][x];
+    int top = cell->height - 1;
+    int targets;
+
+    if (top >= GUNGI_MAX_STACK) {
+        top = GUNGI_MAX_STACK - 1;
+    }
+
+    state->selection.kind = UI_SOURCE_BOARD;
+    state->selection.x = x;
+    state->selection.y = y;
+    state->selection.level = top;
+    state->selection.hand_index = -1;
+    state->selection.player = cell->stack[top].owner;
+    if (state->action == GUNGI_ACTION_NEW) {
+        state->action = GUNGI_ACTION_MOVE;
+    }
+
+    targets = ComputeBoardTargets(state, x, y);
+    if (targets > 0) {
+        SetMessage(state, TextFormat("Selected board %d,%d. %d target(s) highlighted.", x + 1, y + 1, targets));
+    } else {
+        SetMessage(state, TextFormat("Selected board %d,%d. No legal targets.", x + 1, y + 1));
+    }
+}
+
 static void SubmitRequest(AppState *state, int to_x, int to_y)
 {
     if (state->selection.kind == UI_SOURCE_NONE) {
@@ -570,20 +754,25 @@ static void SubmitRequest(AppState *state, int to_x, int to_y)
     request.to_y = to_y;
     request.hand_index = -1;
 
-    request.betray_mask = 0;
-    if (request.action == GUNGI_ACTION_NEW || request.action == GUNGI_ACTION_STACK) {
-        if (state->betray_layer0) request.betray_mask |= 1;
-        if (state->betray_layer1) request.betray_mask |= 2;
-    }
-
     if (state->selection.kind == UI_SOURCE_HAND) {
         request.action = GUNGI_ACTION_NEW;
         request.hand_index = state->selection.hand_index;
     } else {
-        request.action = state->action == GUNGI_ACTION_NEW ? GUNGI_ACTION_MOVE : state->action;
+        UiTargetFlags flags = state->valid_targets[to_y][to_x];
+        if (flags == 0) {
+            SetMessage(state, TextFormat("Board %d,%d is not a legal target. Pick a highlighted square.", to_x + 1, to_y + 1));
+            return;
+        }
+        request.action = PreferredTargetAction(state, to_x, to_y);
         request.from_x = state->selection.x;
         request.from_y = state->selection.y;
         request.from_level = state->selection.level;
+    }
+
+    request.betray_mask = 0;
+    if (request.action == GUNGI_ACTION_NEW || request.action == GUNGI_ACTION_STACK) {
+        if (state->betray_layer0) request.betray_mask |= 1;
+        if (state->betray_layer1) request.betray_mask |= 2;
     }
 
     // --- 修改：在應用移動前，先備份當前的狀態 ---
@@ -610,58 +799,43 @@ static void SelectBoardCell(AppState *state, int x, int y)
 {
     const GungiCellView *cell = &state->view.board[y][x];
 
-    if (state->selection.kind != UI_SOURCE_NONE) {
+    if (state->selection.kind == UI_SOURCE_BOARD) {
+        bool same_cell = state->selection.x == x && state->selection.y == y;
+        bool own_top = CellHasCurrentPlayerTop(state, x, y);
+        bool explicit_stack = state->action == GUNGI_ACTION_STACK && (state->valid_targets[y][x] & TARGET_STACK) != 0;
+
+        if (same_cell) {
+            SelectBoardPiece(state, x, y);
+            return;
+        }
+        if (own_top && !explicit_stack) {
+            SelectBoardPiece(state, x, y);
+            return;
+        }
+        if (state->valid_targets[y][x] == 0) {
+            SetMessage(state, TextFormat("Board %d,%d is not a legal target. Pick a highlighted square or another own piece.", x + 1, y + 1));
+            return;
+        }
+        SubmitRequest(state, x, y);
+        return;
+    }
+
+    if (state->selection.kind == UI_SOURCE_HAND) {
         SubmitRequest(state, x, y);
         return;
     }
 
     if (cell->height <= 0) {
-        SetMessage(state, "Select a hand piece for New, or select an occupied board cell.");
+        SetMessage(state, "Select one of your pieces first.");
         return;
     }
 
-    int top = cell->height - 1;
-    if (top >= GUNGI_MAX_STACK) {
-        top = GUNGI_MAX_STACK - 1;
+    if (!CellHasCurrentPlayerTop(state, x, y)) {
+        SetMessage(state, "Select one of your own top pieces.");
+        return;
     }
 
-    state->selection.kind = UI_SOURCE_BOARD;
-    state->selection.x = x;
-    state->selection.y = y;
-    state->selection.level = top;
-    state->selection.hand_index = -1;
-    state->selection.player = cell->stack[top].owner;
-    if (state->action == GUNGI_ACTION_NEW) {
-        state->action = GUNGI_ACTION_MOVE;
-    }
-    SetMessage(state, TextFormat("Selected board %d,%d. Choose a target.", x + 1, y + 1));
-
-    // --- 修改：計算這顆棋子的合法步數，包含移動、疊棋與吃子 ---
-    memset(state->valid_targets, 0, sizeof(state->valid_targets));
-    GameState *internal = gungi_game_get_state(state->game);
-    
-    // 只有點擊「自己」的棋子才顯示提示
-    if (internal != NULL && state->selection.player == internal->current_player) {
-        for (int ty = 0; ty < GUNGI_BOARD_SIZE; ty++) {
-            for (int tx = 0; tx < GUNGI_BOARD_SIZE; tx++) {
-                
-                // 產生三種假想的動作
-                Move m1 = gungi_make_move(internal->current_player, x, y, tx, ty);
-                Move m2 = gungi_make_stack_move(internal->current_player, x, y, tx, ty);
-                Move m3 = gungi_make_capture_move(internal->current_player, x, y, tx, ty);
-                
-                // 只要這三個動作有任何一個是合法的，就把這個格子亮起綠框
-                if (gungi_validate_move(internal, m1).ok || 
-                    gungi_validate_move(internal, m2).ok || 
-                    gungi_validate_move(internal, m3).ok) {
-                    
-                    state->valid_targets[ty][tx] = true;
-                }
-            }
-        }
-    }
-
-
+    SelectBoardPiece(state, x, y);
 }
 
 static void SelectHandEntry(AppState *state, GungiPlayer player, int hand_index)
@@ -684,21 +858,13 @@ static void SelectHandEntry(AppState *state, GungiPlayer player, int hand_index)
 static void HandleKeyboard(AppState *state)
 {
     if (IsKeyPressed(KEY_N)) {
-        state->action = GUNGI_ACTION_NEW;
-        ClearSelection(state);
-        SetMessage(state, "Operation: New");
+        SetActionMode(state, GUNGI_ACTION_NEW);
     } else if (IsKeyPressed(KEY_M)) {
-        state->action = GUNGI_ACTION_MOVE;
-        ClearSelection(state);
-        SetMessage(state, "Operation: Move");
+        SetActionMode(state, GUNGI_ACTION_MOVE);
     } else if (IsKeyPressed(KEY_C)) {
-        state->action = GUNGI_ACTION_CAPTURE;
-        ClearSelection(state);
-        SetMessage(state, "Operation: Capture");
+        SetActionMode(state, GUNGI_ACTION_CAPTURE);
     } else if (IsKeyPressed(KEY_S)) {
-        state->action = GUNGI_ACTION_STACK;
-        ClearSelection(state);
-        SetMessage(state, "Operation: Stack");
+        SetActionMode(state, GUNGI_ACTION_STACK);
     } else if (IsKeyPressed(KEY_R)) {
         if (state->game != NULL) {
             gungi_reset(state->game);
@@ -732,7 +898,7 @@ static void HandleKeyboard(AppState *state)
         } else {
             SetMessage(state, "Cannot Undo: No history available.");
         }
-    } else if (IsKeyPressed(KEY_X)) {
+    } else if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_X)) {
         ClearSelection(state);
         SetMessage(state, "Selection cleared.");
     }
@@ -795,16 +961,18 @@ int main(void)
                 if (current_ctrl != CONTROL_MANUAL) {
                     SetMessage(&state, TextFormat("%s AI is thinking...", PlayerName(internal_state->current_player)));
                     // 強制刷新畫面一次，讓玩家看到 Thinking... 與最新的盤面
-                    BeginDrawing(); DrawApp(&state); EndDrawing(); 
+                    DrawApp(&state);
                     
                     clock_t start_time = clock();
-                    Move next_move;
+                    Move next_move = gungi_make_resign(internal_state->current_player);
                     if (current_ctrl == CONTROL_RANDOM_AI) {
                         next_move = gungi_get_random_move(internal_state);
                     } else if (current_ctrl == CONTROL_GREEDY_AI) {
                         next_move = gungi_get_ai_move(internal_state, 1);
                     } else if (current_ctrl == CONTROL_MINIMAX_AI) {
                         next_move = gungi_get_ai_move(internal_state, 2);
+                    } else {
+                        continue;
                     }
 
                     clock_t end_time = clock();

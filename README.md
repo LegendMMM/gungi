@@ -24,6 +24,20 @@ setup_windows.bat
 setup_windows.bat --no-run
 ```
 
+macOS 使用者下載或 clone 專案後，執行：
+
+```sh
+./setup_macos.command
+```
+
+這個腳本會自動下載 raylib 5.5 原始碼到專案內的 `.deps`，接著建置、執行規則測試，最後啟動遊戲。
+
+只建置與測試、不啟動視窗：
+
+```sh
+./setup_macos.command --no-run
+```
+
 ## 手動建置
 
 如果你已經安裝 raylib Windows package，也可以直接用既有建置腳本：
@@ -50,8 +64,9 @@ build.bat
 
 - 左側是 Black hand，右側是 White hand，中間是 9x9 棋盤。
 - 選 `New` 後點手駒，再點棋盤格放置手駒。
-- 選棋盤上的棋子後，再點目標格執行 `Move`、`Capture` 或 `Stack`。
-- 快捷鍵：`N` New、`M` Move、`C` Capture、`S` Stack、`R` Restart、`Esc` 清除選取。
+- 點目前回合玩家的棋子後，棋盤會提示可移動位置；點另一顆己方棋子會切換提示。
+- 點空格會移動，點敵方棋子會吃子；按 `S` 後點可疊目標可執行 `Stack`。
+- 快捷鍵：`N` New、`M` Move、`C` Capture、`S` Stack、`R` Restart、`Esc` / `X` 清除選取。
 - `Restart` 重新開局，`Resign` 由目前回合玩家投降。
 
 ## 目前限制
