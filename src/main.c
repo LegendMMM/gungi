@@ -930,8 +930,95 @@ static void HandleMouse(AppState *state)
     }
 }
 
+// ============================================================================
+// --- AI 自動對戰與數據收集腳本 (Benchmark) ---
+// ============================================================================
+static void RunAutoBenchmark() {
+    printf("==========================================\n");
+    printf("  Starting 100 AI Matches Benchmark...\n");
+    printf("==========================================\n");
+
+    // 建立並開啟 CSV 檔案準備寫入數據
+    FILE *fp = fopen("ai_benchmark_data.csv", "w");
+    if (!fp) {
+        printf("[Error] Failed to create CSV file!\n");
+        return;
+    }
+    
+    // 寫入 CSV 的標題列 (Column Headers)
+    fprintf(fp, "Match_ID,Turn,Player,ThinkTime_sec,Eval_Score\n");
+
+    int black_wins = 0;
+    int white_wins = 0;
+    int draws = 0;
+    int total_matches = 100;
+
+    for (int m = 1; m <= total_matches; m++) {
+        GungiGame *game = gungi_create();
+        GameState *internal = gungi_game_get_state(game);
+        int turn = 1;
+
+        printf("Running Match %d / %d ...\n", m, total_matches);
+
+        // 設定防呆上限：400 步如果還沒分出勝負就當作和局 (避免 AI 進入千日手無限迴圈)
+        while (internal->status == GUNGI_STATUS_ONGOING && turn <= 400) {
+            clock_t start = clock();
+            Move next_move;
+
+            // ------------------------------------------------------------
+            // 這裡可以設定你要讓哪兩個 AI 互打！
+            // ------------------------------------------------------------
+            if (internal->current_player == GUNGI_PLAYER_BLACK) {
+                next_move = gungi_get_random_move(internal);
+            } else {
+                next_move = gungi_get_ai_move(internal, 1); 
+            }
+
+            clock_t end = clock();
+            double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
+            int eval_score = gungi_evaluate_board(internal);
+
+            // 將這一步的數據寫入 CSV 檔案
+            // 格式：第幾局, 總步數, 輪到誰(0=黑,1=白), 思考時間, 盤面分數
+            fprintf(fp, "%d,%d,%d,%f,%d\n", m, turn, internal->current_player, time_spent, eval_score);
+
+            // 執行動作並進入下一回合
+            gungi_apply_move(internal, next_move);
+            turn++;
+        }
+
+        // 記錄這場的勝負結果
+        if (internal->status == GUNGI_STATUS_BLACK_WIN) {
+            black_wins++;
+        } else if (internal->status == GUNGI_STATUS_WHITE_WIN) {
+            white_wins++;
+        } else {
+            draws++; // 千日手或是超過 400 步
+        }
+
+        gungi_destroy(game);
+    }
+
+    fclose(fp);
+
+    // 印出最終統計結果
+    printf("\n==========================================\n");
+    printf("          Benchmark Complete!             \n");
+    printf("==========================================\n");
+    printf("Black (Depth 1) Wins : %d (%.1f%%)\n", black_wins, (float)black_wins/total_matches*100);
+    printf("White (Depth 2) Wins : %d (%.1f%%)\n", white_wins, (float)white_wins/total_matches*100);
+    printf("Draws / Timeouts     : %d (%.1f%%)\n", draws, (float)draws/total_matches*100);
+    printf("------------------------------------------\n");
+    printf("Data successfully saved to 'ai_benchmark_data.csv'\n");
+}
+
 int main(void)
 {
+    /*
+    RunAutoBenchmark();
+    return 0; // 測試完直接退出，不開啟 Raylib 視窗！
+    */
+
     srand((unsigned int)time(NULL));
     
     static AppState state;

@@ -186,6 +186,7 @@ Move gungi_get_ai_move(const GameState *state, int depth) {
     int bestEval = (state->current_player == GUNGI_PLAYER_BLACK) ? -INT_MAX : INT_MAX;
     Move bestMove = moves[0];
 
+    #pragma omp parallel for
     for (int i = 0; i < count; i++) {
         GameState next_state = *state;
         gungi_apply_move(&next_state, moves[i]);
