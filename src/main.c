@@ -938,15 +938,14 @@ static void RunAutoBenchmark() {
     printf("  Starting 100 AI Matches Benchmark...\n");
     printf("==========================================\n");
 
-    // 建立並開啟 CSV 檔案準備寫入數據
     FILE *fp = fopen("ai_benchmark_data.csv", "w");
     if (!fp) {
         printf("[Error] Failed to create CSV file!\n");
         return;
     }
     
-    // 寫入 CSV 的標題列 (Column Headers)
-    fprintf(fp, "Match_ID,Turn,Player,ThinkTime_sec,Eval_Score\n");
+    // --- 修改 1：多加一個 Info (備註) 欄位 ---
+    fprintf(fp, "Match_ID,Turn,Player,ThinkTime_sec,Eval_Score,Info\n");
 
     int black_wins = 0;
     int white_wins = 0;
@@ -960,48 +959,67 @@ static void RunAutoBenchmark() {
 
         printf("Running Match %d / %d ...\n", m, total_matches);
 
-        // 設定防呆上限：400 步如果還沒分出勝負就當作和局 (避免 AI 進入千日手無限迴圈)
+        // --- 修改 2：拔除暫存陣列，直接即時寫入 CSV ---
         while (internal->status == GUNGI_STATUS_ONGOING && turn <= 400) {
             clock_t start = clock();
             Move next_move;
 
             // ------------------------------------------------------------
             // 這裡可以設定你要讓哪兩個 AI 互打！
+            // gungi_get_random_move(internal) 是完全隨機的 AI
+            // gungi_get_ai_move(internal, depth) 是使用 Minimax 演算法的 AI，depth 參數越大代表思考越深 (但也越慢)
             // ------------------------------------------------------------
             if (internal->current_player == GUNGI_PLAYER_BLACK) {
                 next_move = gungi_get_random_move(internal);
             } else {
-                next_move = gungi_get_ai_move(internal, 1); 
+                next_move = gungi_get_ai_move(internal, 1);
             }
 
             clock_t end = clock();
             double time_spent = (double)(end - start) / CLOCKS_PER_SEC;
             int eval_score = gungi_evaluate_board(internal);
 
-            // 將這一步的數據寫入 CSV 檔案
-            // 格式：第幾局, 總步數, 輪到誰(0=黑,1=白), 思考時間, 盤面分數
-            fprintf(fp, "%d,%d,%d,%f,%d\n", m, turn, internal->current_player, time_spent, eval_score);
+            // 即時寫入該回合數據 (最後一個逗號代表 Info 欄位留空)
+            fprintf(fp, "%d,%d,%d,%f,%d,\n", m, turn, internal->current_player, time_spent, eval_score);
 
-            // 執行動作並進入下一回合
             gungi_apply_move(internal, next_move);
             turn++;
         }
 
-        // 記錄這場的勝負結果
+        // 判斷最終勝負
+        const char *winner_str = "Draw_or_Timeout";
+        
         if (internal->status == GUNGI_STATUS_BLACK_WIN) {
+            winner_str = "Winner: Black";
             black_wins++;
-        } else if (internal->status == GUNGI_STATUS_WHITE_WIN) {
+        } 
+        else if (internal->status == GUNGI_STATUS_WHITE_WIN) {
+            winner_str = "Winner: White";
             white_wins++;
-        } else {
-            draws++; // 千日手或是超過 400 步
+        } 
+        else if (internal->status == GUNGI_STATUS_RESIGNED) {
+            // AI 無路可走(被將死)時會認輸，勝利者是對手
+            if (internal->winner == GUNGI_PLAYER_BLACK) {
+                winner_str = "Winner: Black (Checkmate)";
+                black_wins++;
+            } else {
+                winner_str = "Winner: White (Checkmate)";
+                white_wins++;
+            }
+        } 
+        else {
+            draws++; // 真正的平手 (千日手或 400 步上限)
         }
+
+        // --- 修改 3：在該場比賽的最後面，輸出一行專屬的結算結果 ---
+        // 為了不破壞數字格式，前面的數字欄位我們填入 -1 或 0
+        fprintf(fp, "%d,-1,-1,0.000000,0,%s\n", m, winner_str);
 
         gungi_destroy(game);
     }
 
     fclose(fp);
 
-    // 印出最終統計結果
     printf("\n==========================================\n");
     printf("          Benchmark Complete!             \n");
     printf("==========================================\n");

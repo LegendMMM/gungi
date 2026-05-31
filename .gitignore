@@ -3,6 +3,7 @@
 *.exe
 *.pdb
 *.ilk
+*.csv
 
 gungi.exe
 tests/test_rules.exe
