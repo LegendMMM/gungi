@@ -254,7 +254,7 @@ static void test_repetition_draw(void)
     CHECK(result.draw);
 }
 
-static void test_special_jump_height_limit(void)
+static void test_special_jump_ignores_height(void)
 {
     GameState state;
     RulesResult result;
@@ -271,12 +271,13 @@ static void test_special_jump_height_limit(void)
     setup_marshals(&state);
     CHECK(gungi_place_piece(&state, GUNGI_PLAYER_BLACK, GUNGI_PIECE_CANNON, 4, 4));
     CHECK(gungi_place_piece(&state, GUNGI_PLAYER_BLACK, GUNGI_PIECE_PAWN, 4, 5));
+    CHECK(gungi_place_piece(&state, GUNGI_PLAYER_BLACK, GUNGI_PIECE_PAWN, 4, 5)); 
     CHECK(gungi_place_piece(&state, GUNGI_PLAYER_BLACK, GUNGI_PIECE_PAWN, 4, 5));
     gungi_reset_repetition(&state);
 
-    result = gungi_validate_move(&state, gungi_make_move(GUNGI_PLAYER_BLACK, 4, 4, 4, 7));
-    CHECK(!result.ok);
-    CHECK(result.code == GUNGI_RULE_ERR_BLOCKED);
+    result = gungi_apply_move(&state, gungi_make_move(GUNGI_PLAYER_BLACK, 4, 4, 4, 7));
+    CHECK(result.ok); 
+    CHECK(gungi_top_piece(&state, 4, 7).type == GUNGI_PIECE_CANNON);
 }
 
 int main(void)
@@ -289,7 +290,7 @@ int main(void)
     test_resignation();
     test_check_detection();
     test_repetition_draw();
-    test_special_jump_height_limit();
+    test_special_jump_ignores_height();
 
     printf("test_rules: %d checks passed\n", tests_run);
     return 0;

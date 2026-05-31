@@ -28,7 +28,7 @@ typedef struct SetupPiece {
 } SetupPiece;
 
 #define RULE(dx, dy, min_d, max_d, inf, scale, jump) \
-    { (dx), (dy), (min_d), (max_d), (inf), (scale), (jump) }
+    { (dx), (dy), (min_d), (max_d), (inf), (scale), (jump), 0 }
 
 #define RULE_SHIFT(dx, dy, min_d, max_d, inf, scale, jump, sy) \
     { (dx), (dy), (min_d), (max_d), (inf), (scale), (jump), (sy) }
@@ -383,6 +383,8 @@ static int rule_matches_delta(const MovementRule *rule, int dx, int dy_forward, 
 static int path_is_clear_or_jumpable(const GameState *state, int from_x, int from_y, int to_x, int to_y,
                                      int can_jump, int source_height)
 {
+    (void)source_height;
+    
     int dx = to_x - from_x;
     int dy = to_y - from_y;
     if (dx != 0 && dy != 0 && abs(dx) != abs(dy)) {
@@ -397,7 +399,7 @@ static int path_is_clear_or_jumpable(const GameState *state, int from_x, int fro
     while (x != to_x || y != to_y) {
         int height = const_cell(state, x, y)->height;
         if (height > 0) {
-            if (!can_jump || height > source_height) {
+            if (!can_jump) {
                 return 0;
             }
         }
