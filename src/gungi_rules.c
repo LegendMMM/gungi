@@ -13,6 +13,7 @@ typedef struct MovementRule {
     int unlimited;
     int scales_with_height;
     int special_jump;
+    int shift_y;
 } MovementRule;
 
 typedef struct MovementSet {
@@ -28,6 +29,9 @@ typedef struct SetupPiece {
 
 #define RULE(dx, dy, min_d, max_d, inf, scale, jump) \
     { (dx), (dy), (min_d), (max_d), (inf), (scale), (jump) }
+
+#define RULE_SHIFT(dx, dy, min_d, max_d, inf, scale, jump, sy) \
+    { (dx), (dy), (min_d), (max_d), (inf), (scale), (jump), (sy) }
 
 static const Piece EMPTY_PIECE = { GUNGI_PIECE_NONE, GUNGI_PLAYER_NONE };
 
@@ -128,9 +132,10 @@ static const MovementRule MUSKETEER_RULES[] = {
 };
 
 static const MovementRule ARCHER_RULES[] = {
-    RULE(0, -1, 1, 1, 0, 1, 0),
+    RULE(0, -1, 1, 1, 0, 1, 1),
     RULE(0, 1, 2, 2, 0, 1, 1),
-    RULE(-1, 1, 2, 2, 0, 1, 1), RULE(1, 1, 2, 2, 0, 1, 1)
+    RULE_SHIFT(-1, 1, 1, 1, 0, 1, 1, 1),
+    RULE_SHIFT(1, 1, 1, 1, 0, 1, 1, 1)
 };
 
 static const SetupPiece DEFAULT_SETUP[] = {
@@ -342,29 +347,27 @@ static MovementSet movement_set_for(GungiPieceType type)
 static int rule_matches_delta(const MovementRule *rule, int dx, int dy_forward, int *distance)
 {
     int dist = 0;
+    int adjusted_dy = dy_forward - rule->shift_y;
 
     if (rule->step_x == 0 && rule->step_y == 0) {
         return 0;
     }
 
     if (rule->step_x == 0) {
-        if (dx != 0 || signum(dy_forward) != rule->step_y) {
-            return 0;
-        }
-        dist = dy_forward * rule->step_y;
+        if (dx != 0) return 0;
+        if (rule->step_y * adjusted_dy <= 0) return 0;
+        if (adjusted_dy % rule->step_y != 0) return 0;
+        dist = adjusted_dy / rule->step_y;
     } else if (rule->step_y == 0) {
-        if (dy_forward != 0 || signum(dx) != rule->step_x) {
-            return 0;
-        }
-        dist = dx * rule->step_x;
+        if (adjusted_dy != 0) return 0;
+        if (rule->step_x * dx <= 0) return 0;
+        if (dx % rule->step_x != 0) return 0;
+        dist = dx / rule->step_x;
     } else {
-        if (signum(dx) != rule->step_x || signum(dy_forward) != rule->step_y) {
-            return 0;
-        }
-        if (dx * rule->step_x != dy_forward * rule->step_y) {
-            return 0;
-        }
-        dist = dx * rule->step_x;
+        if (rule->step_x * dx <= 0 || rule->step_y * adjusted_dy <= 0) return 0;
+        if (dx % rule->step_x != 0 || adjusted_dy % rule->step_y != 0) return 0;
+        dist = dx / rule->step_x;
+        if (dist != adjusted_dy / rule->step_y) return 0;
     }
 
     if (dist <= 0) {
@@ -380,8 +383,14 @@ static int rule_matches_delta(const MovementRule *rule, int dx, int dy_forward, 
 static int path_is_clear_or_jumpable(const GameState *state, int from_x, int from_y, int to_x, int to_y,
                                      int can_jump, int source_height)
 {
-    int step_x = signum(to_x - from_x);
-    int step_y = signum(to_y - from_y);
+    int dx = to_x - from_x;
+    int dy = to_y - from_y;
+    if (dx != 0 && dy != 0 && abs(dx) != abs(dy)) {
+        return 1; 
+    }
+
+    int step_x = signum(dx);
+    int step_y = signum(dy);
     int x = from_x + step_x;
     int y = from_y + step_y;
 
