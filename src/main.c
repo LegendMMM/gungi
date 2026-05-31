@@ -960,7 +960,7 @@ static void RunAutoBenchmark() {
         printf("Running Match %d / %d ...\n", m, total_matches);
 
         // --- 修改 2：拔除暫存陣列，直接即時寫入 CSV ---
-        while (internal->status == GUNGI_STATUS_ONGOING && turn <= 400) {
+        while (internal->status == GUNGI_STATUS_ONGOING && turn <= 1000) {
             clock_t start = clock();
             Move next_move;
 
@@ -970,9 +970,9 @@ static void RunAutoBenchmark() {
             // gungi_get_ai_move(internal, depth) 是使用 Minimax 演算法的 AI，depth 參數越大代表思考越深 (但也越慢)
             // ------------------------------------------------------------
             if (internal->current_player == GUNGI_PLAYER_BLACK) {
-                next_move = gungi_get_random_move(internal);
+                next_move = gungi_get_ai_move(internal, 2);
             } else {
-                next_move = gungi_get_ai_move(internal, 1);
+                next_move = gungi_get_ai_move(internal, 2);
             }
 
             clock_t end = clock();
@@ -1008,7 +1008,7 @@ static void RunAutoBenchmark() {
             }
         } 
         else {
-            draws++; // 真正的平手 (千日手或 400 步上限)
+            draws++; // 真正的平手 (千日手或 1000 步上限)
         }
 
         // --- 修改 3：在該場比賽的最後面，輸出一行專屬的結算結果 ---
