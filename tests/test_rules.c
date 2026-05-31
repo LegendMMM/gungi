@@ -1,4 +1,5 @@
 #include "../src/gungi_rules.h"
+#include "../src/ai_core.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -70,6 +71,23 @@ static void test_initialization(void)
     CHECK(total_owned_pieces(&state, GUNGI_PLAYER_WHITE) == 25);
     CHECK(gungi_hand_count(&state, GUNGI_PLAYER_BLACK, GUNGI_PIECE_CAPTAIN) == 1);
     CHECK(gungi_hand_count(&state, GUNGI_PLAYER_WHITE, GUNGI_PIECE_MUSKETEER) == 1);
+}
+
+static void test_legal_move_generation(void)
+{
+    GameState state;
+    Move moves[GUNGI_MAX_LEGAL_MOVES];
+    int count;
+    int i;
+
+    gungi_init(&state);
+    count = gungi_generate_legal_moves(&state, moves, GUNGI_MAX_LEGAL_MOVES);
+
+    CHECK(count > 0);
+    CHECK(count <= GUNGI_MAX_LEGAL_MOVES);
+    for (i = 0; i < count; ++i) {
+        CHECK(gungi_validate_move(&state, moves[i]).ok);
+    }
 }
 
 static void test_normal_move(void)
@@ -283,6 +301,7 @@ static void test_special_jump_ignores_height(void)
 int main(void)
 {
     test_initialization();
+    test_legal_move_generation();
     test_normal_move();
     test_stacking_and_top_piece_rules();
     test_capture_and_marshal_capture();

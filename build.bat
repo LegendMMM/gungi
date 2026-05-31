@@ -52,22 +52,31 @@ if not exist "%ROOT%tests\test_rules.c" (
 )
 
 if not exist "%ROOT%tests" mkdir "%ROOT%tests"
+if not exist "%ROOT%tools" mkdir "%ROOT%tools"
 
 echo Building gungi.exe...
-"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%RAYLIB_DIR%\src" -I"%ROOT%src" "%ROOT%src\ai_core.c" "%ROOT%src\main.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%gungi.exe" -L"%RAYLIB_DIR%\src" -lraylib -lopengl32 -lgdi32 -lwinmm -fopenmp
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%RAYLIB_DIR%\src" -I"%ROOT%src" "%ROOT%src\ai_core.c" "%ROOT%src\q_model.c" "%ROOT%src\main.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%gungi.exe" -L"%RAYLIB_DIR%\src" -lraylib -lopengl32 -lgdi32 -lwinmm -lm -fopenmp
 if errorlevel 1 (
     echo [error] Failed to build gungi.exe.
     exit /b 1
 )
 
 echo Building tests\test_rules.exe...
-"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tests\test_rules.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tests\test_rules.exe"
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tests\test_rules.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tests\test_rules.exe" -lm -fopenmp
 if errorlevel 1 (
     echo [error] Failed to build tests\test_rules.exe.
+    exit /b 1
+)
+
+echo Building tools\train_q.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\train_q.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\train_q.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\train_q.exe.
     exit /b 1
 )
 
 echo Build completed:
 echo   %ROOT%gungi.exe
 echo   %ROOT%tests\test_rules.exe
+echo   %ROOT%tools\train_q.exe
 exit /b 0
