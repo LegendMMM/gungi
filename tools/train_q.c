@@ -12,7 +12,7 @@
 #endif
 
 #define DEFAULT_EPISODES 10000
-#define MAX_PLY_PER_GAME 600
+#define MAX_PLY_PER_GAME 20000
 #define START_EPSILON 0.30f
 #define END_EPSILON 0.05f
 

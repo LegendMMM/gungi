@@ -8,15 +8,13 @@
 
 #define PIECE_FEATURE_COUNT (GUNGI_PIECE_TYPE_COUNT - 1)
 #define BOARD_COUNT_SCALE 10.0f
-#define MOBILITY_FEATURE_LIMIT 256
-#define MOBILITY_SCALE 200.0f
 #define STACK_LEVEL_SCALE 20.0f
 #define HAND_COUNT_SCALE 10.0f
 #define TRAINING_PLY_LIMIT 600.0f
 #define TRAINING_GENERATED_MOVE_LIMIT 512
 #define TRAINING_CANDIDATE_LIMIT 64
 
-static const char MODEL_MAGIC[8] = { 'G', 'U', 'N', 'G', 'I', 'V', '2', '\0' };
+static const char MODEL_MAGIC[8] = { 'G', 'U', 'N', 'G', 'I', 'V', '3', '\0' };
 
 static const GungiQProfileConfig Q_PROFILES[] = {
     { GUNGI_Q_PROFILE_BALANCED, "balanced-value", 0.01f, 0.95f },
@@ -101,17 +99,6 @@ int gungi_q_save(const GungiQModel *model, const char *path)
     return 1;
 }
 
-static float clamp_float(float value, float min_value, float max_value)
-{
-    if (value < min_value) {
-        return min_value;
-    }
-    if (value > max_value) {
-        return max_value;
-    }
-    return value;
-}
-
 static int in_bounds(int x, int y)
 {
     return x >= 0 && x < GUNGI_BOARD_SIZE && y >= 0 && y < GUNGI_BOARD_SIZE;
@@ -140,20 +127,6 @@ static int find_top_marshal_local(const GameState *state, GungiPlayer player, in
     return 0;
 }
 
-static int mobility_for_player(const GameState *state, GungiPlayer player)
-{
-    GameState copy;
-    Move moves[MOBILITY_FEATURE_LIMIT];
-
-    if (state == NULL || state->status != GUNGI_STATUS_ONGOING) {
-        return 0;
-    }
-
-    copy = *state;
-    copy.current_player = player;
-    return gungi_generate_legal_moves(&copy, moves, MOBILITY_FEATURE_LIMIT);
-}
-
 static int player_attacks_enemy_marshal(const GameState *state, GungiPlayer player)
 {
     GungiPlayer opponent = gungi_opponent(player);
@@ -165,19 +138,6 @@ static int player_attacks_enemy_marshal(const GameState *state, GungiPlayer play
     }
 
     return gungi_is_square_attacked(state, marshal_x, marshal_y, player);
-}
-
-static int own_marshal_directly_attacked(const GameState *state, GungiPlayer player)
-{
-    GungiPlayer opponent = gungi_opponent(player);
-    int marshal_x = -1;
-    int marshal_y = -1;
-
-    if (state == NULL || !find_top_marshal_local(state, player, &marshal_x, &marshal_y)) {
-        return 0;
-    }
-
-    return gungi_is_square_attacked(state, marshal_x, marshal_y, opponent);
 }
 
 int gungi_q_capture_value(const GameState *state, Move move)
@@ -240,9 +200,6 @@ static void extract_value_features(float features[GUNGI_V_FEATURE_COUNT], const 
             (float)(board_counts[player][type] - board_counts[opponent][type]) / BOARD_COUNT_SCALE;
     }
 
-    features[index++] =
-        (float)(mobility_for_player(state, player) - mobility_for_player(state, opponent)) / MOBILITY_SCALE;
-
     for (type = GUNGI_PIECE_NONE + 1; type < GUNGI_PIECE_TYPE_COUNT; ++type) {
         features[index++] =
             (float)(stack_levels[player][type] - stack_levels[opponent][type]) / STACK_LEVEL_SCALE;
@@ -302,59 +259,24 @@ void gungi_v_update(GungiQModel *model, const GameState *state, float target, fl
 
 float gungi_v_immediate_reward(const GameState *before, Move move, const GameState *after, const RulesResult *result, int timeout)
 {
-    float reward = -0.005f;
-    int capture_value = gungi_q_capture_value(before, move);
-    int repetition_count = 0;
-    RulesResult local_result;
+    (void)before;
+    (void)result;
 
-    if (capture_value > 0) {
-        reward += (float)capture_value / 10000.0f;
+    if (timeout) {
+        return -1.0f;
     }
-
-    if (result == NULL) {
-        local_result = gungi_validate_move(before, move);
-        result = &local_result;
-    }
-
-    if (result->gives_check) {
-        reward += 0.05f;
-    }
-
-    if (before != NULL && after != NULL) {
-        float ply_ratio = clamp_float((float)before->ply_count / TRAINING_PLY_LIMIT, 0.0f, 1.0f);
-        int own_direct_before = own_marshal_directly_attacked(before, move.player);
-        int own_direct_after = own_marshal_directly_attacked(after, move.player);
-
-        reward -= 0.004f * ply_ratio;
-
-        if (own_direct_after) {
-            reward -= 0.8f;
-        }
-        if (own_direct_before && !own_direct_after) {
-            reward += 0.25f;
-        }
-
-        repetition_count = gungi_count_repetition(after, gungi_position_hash(after));
-        if (repetition_count > 1) {
-            reward -= 0.2f * (float)(repetition_count - 1);
-        }
-    }
-
     if (after != NULL) {
         if (after->status == GUNGI_STATUS_BLACK_WIN ||
             after->status == GUNGI_STATUS_WHITE_WIN ||
             after->status == GUNGI_STATUS_RESIGNED) {
-            reward += after->winner == move.player ? 2.0f : -2.0f;
-        } else if (after->status == GUNGI_STATUS_DRAW) {
-            reward -= 1.0f;
+            return after->winner == move.player ? 1.0f : -1.0f;
+        }
+        if (after->status == GUNGI_STATUS_DRAW) {
+            return -0.5f;
         }
     }
 
-    if (timeout) {
-        reward -= 1.2f;
-    }
-
-    return reward;
+    return -0.01f;
 }
 
 float gungi_v_score_move(const GungiQModel *model, const GameState *before, Move move, float gamma)

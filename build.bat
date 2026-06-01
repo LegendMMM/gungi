@@ -75,8 +75,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Building tools\eval_q.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\eval_q.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\eval_q.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\eval_q.exe.
+    exit /b 1
+)
+
 echo Build completed:
 echo   %ROOT%gungi.exe
 echo   %ROOT%tests\test_rules.exe
 echo   %ROOT%tools\train_q.exe
+echo   %ROOT%tools\eval_q.exe
 exit /b 0
