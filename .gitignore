@@ -5,6 +5,7 @@
 *.ilk
 *.csv
 *.log
+!train_30000.log
 
 gungi.exe
 tests/test_rules.exe
