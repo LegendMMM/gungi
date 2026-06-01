@@ -5,7 +5,6 @@
 *.ilk
 *.csv
 *.log
-models/*.bin
 
 gungi.exe
 tests/test_rules.exe

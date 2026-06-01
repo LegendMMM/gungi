@@ -155,8 +155,13 @@ int main(int argc, char **argv)
     int timeouts = 0;
     int total_ply = 0;
     int episode;
+    const char *model_path = getenv(GUNGI_Q_MODEL_ENV);
     const char *trace_path = getenv("GUNGI_Q_TRACE");
     FILE *trace = NULL;
+
+    if (model_path == NULL || model_path[0] == '\0') {
+        model_path = GUNGI_V_DEFAULT_MODEL_PATH;
+    }
 
     if (argc > 1) {
         episodes = atoi(argv[1]);
@@ -194,9 +199,14 @@ int main(int argc, char **argv)
             RulesResult result;
             float reward;
             float target;
-            float value_before = gungi_v_evaluate(&model, &before);
-            float value_after;
-            int capture_value = gungi_q_capture_value(&before, move);
+            float value_before = 0.0f;
+            float value_after = 0.0f;
+            int capture_value = 0;
+
+            if (trace != NULL) {
+                value_before = gungi_v_evaluate(&model, &before);
+                capture_value = gungi_q_capture_value(&before, move);
+            }
 
             result = gungi_apply_move(&state, move);
             if (!result.ok) {
@@ -263,14 +273,14 @@ int main(int argc, char **argv)
     }
 
     ensure_models_dir();
-    if (!gungi_q_save(&model, GUNGI_V_DEFAULT_MODEL_PATH)) {
-        fprintf(stderr, "Failed to save %s\n", GUNGI_V_DEFAULT_MODEL_PATH);
+    if (!gungi_q_save(&model, model_path)) {
+        fprintf(stderr, "Failed to save %s\n", model_path);
         return 1;
     }
 
     gungi_q_init(&verify_model);
-    if (!gungi_q_load(&verify_model, GUNGI_V_DEFAULT_MODEL_PATH)) {
-        fprintf(stderr, "Failed to reload %s\n", GUNGI_V_DEFAULT_MODEL_PATH);
+    if (!gungi_q_load(&verify_model, model_path)) {
+        fprintf(stderr, "Failed to reload %s\n", model_path);
         return 1;
     }
 
@@ -279,7 +289,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("Saved %s | weight checksum %.6f\n", GUNGI_V_DEFAULT_MODEL_PATH, weight_checksum(&verify_model));
+    printf("Saved %s | weight checksum %.6f\n", model_path, weight_checksum(&verify_model));
     print_weights(&verify_model);
     return 0;
 }

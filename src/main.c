@@ -36,6 +36,12 @@ static void ConfigureAiThreads(void)
 #endif
 }
 
+static const char *ResolveQModelPath(void)
+{
+    const char *path = getenv(GUNGI_Q_MODEL_ENV);
+    return (path != NULL && path[0] != '\0') ? path : GUNGI_V_DEFAULT_MODEL_PATH;
+}
+
 typedef unsigned char UiTargetFlags;
 
 typedef enum UiSourceKind {
@@ -1114,14 +1120,16 @@ int main(void)
     state.action = GUNGI_ACTION_MOVE;
     ClearSelection(&state);
     LayoutApp(&state);
+    const char *q_model_path = ResolveQModelPath();
     gungi_q_init(&state.q_model);
-    state.q_model_loaded = gungi_q_load(&state.q_model, GUNGI_V_DEFAULT_MODEL_PATH) != 0;
+    state.q_model_loaded = gungi_q_load(&state.q_model, q_model_path) != 0;
 
     state.game = gungi_create();
     RefreshView(&state);
-    if (!state.q_model_loaded) {
-        SetMessage(&state, "Q model not loaded; Q mode will use random fallback.");
-    }
+    SetMessage(&state,
+               state.q_model_loaded
+                   ? TextFormat("Q model loaded: %s", q_model_path)
+                   : TextFormat("Q model not loaded: %s; Q mode uses random fallback.", q_model_path));
 
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Gungi raylib");
     SetTargetFPS(60);

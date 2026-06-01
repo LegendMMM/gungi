@@ -4,8 +4,9 @@
 #include "ai_core.h"
 #include "gungi_rules.h"
 
-#define GUNGI_V_FEATURE_COUNT 8
+#define GUNGI_V_FEATURE_COUNT 45
 #define GUNGI_V_DEFAULT_MODEL_PATH "models/v_weights.bin"
+#define GUNGI_Q_MODEL_ENV "GUNGI_Q_MODEL"
 
 typedef enum GungiQProfile {
     GUNGI_Q_PROFILE_BALANCED = 0,

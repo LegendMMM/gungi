@@ -6,10 +6,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MOBILITY_SAMPLE_LIMIT 200
-#define REWARD_MOBILITY_SAMPLE_LIMIT 80
+#define PIECE_FEATURE_COUNT (GUNGI_PIECE_TYPE_COUNT - 1)
+#define BOARD_COUNT_SCALE 10.0f
+#define MOBILITY_FEATURE_LIMIT 256
+#define MOBILITY_SCALE 200.0f
+#define STACK_LEVEL_SCALE 20.0f
+#define HAND_COUNT_SCALE 10.0f
+#define TRAINING_PLY_LIMIT 600.0f
+#define TRAINING_GENERATED_MOVE_LIMIT 512
+#define TRAINING_CANDIDATE_LIMIT 64
 
-static const char MODEL_MAGIC[8] = { 'G', 'U', 'N', 'G', 'I', 'V', '1', '\0' };
+static const char MODEL_MAGIC[8] = { 'G', 'U', 'N', 'G', 'I', 'V', '2', '\0' };
 
 static const GungiQProfileConfig Q_PROFILES[] = {
     { GUNGI_Q_PROFILE_BALANCED, "balanced-value", 0.01f, 0.95f },
@@ -105,16 +112,6 @@ static float clamp_float(float value, float min_value, float max_value)
     return value;
 }
 
-static int abs_int(int value)
-{
-    return value < 0 ? -value : value;
-}
-
-static int manhattan_distance(int ax, int ay, int bx, int by)
-{
-    return abs_int(ax - bx) + abs_int(ay - by);
-}
-
 static int in_bounds(int x, int y)
 {
     return x >= 0 && x < GUNGI_BOARD_SIZE && y >= 0 && y < GUNGI_BOARD_SIZE;
@@ -143,59 +140,44 @@ static int find_top_marshal_local(const GameState *state, GungiPlayer player, in
     return 0;
 }
 
-static int material_for_player(const GameState *state, GungiPlayer player)
-{
-    int total = 0;
-    int y;
-    int x;
-    int level;
-    int type;
-
-    for (y = 0; y < GUNGI_BOARD_SIZE; ++y) {
-        for (x = 0; x < GUNGI_BOARD_SIZE; ++x) {
-            int height = gungi_cell_height(state, x, y);
-            for (level = 0; level < height; ++level) {
-                Piece piece = gungi_stack_piece(state, x, y, level);
-                if (piece.owner == player) {
-                    total += gungi_piece_value(piece.type);
-                }
-            }
-        }
-    }
-
-    for (type = GUNGI_PIECE_NONE + 1; type < GUNGI_PIECE_TYPE_COUNT; ++type) {
-        total += gungi_hand_count(state, player, (GungiPieceType)type) *
-                 (gungi_piece_value((GungiPieceType)type) * 11 / 10);
-    }
-
-    return total;
-}
-
-static int mobility_for_player_limited(const GameState *state, GungiPlayer player, int limit)
+static int mobility_for_player(const GameState *state, GungiPlayer player)
 {
     GameState copy;
-    Move moves[MOBILITY_SAMPLE_LIMIT];
-    int capped_limit;
+    Move moves[MOBILITY_FEATURE_LIMIT];
 
     if (state == NULL || state->status != GUNGI_STATUS_ONGOING) {
         return 0;
     }
 
-    capped_limit = limit;
-    if (capped_limit < 1) {
-        capped_limit = 1;
-    } else if (capped_limit > MOBILITY_SAMPLE_LIMIT) {
-        capped_limit = MOBILITY_SAMPLE_LIMIT;
-    }
-
     copy = *state;
     copy.current_player = player;
-    return gungi_generate_legal_moves(&copy, moves, capped_limit);
+    return gungi_generate_legal_moves(&copy, moves, MOBILITY_FEATURE_LIMIT);
 }
 
-static int mobility_for_player(const GameState *state, GungiPlayer player)
+static int player_attacks_enemy_marshal(const GameState *state, GungiPlayer player)
 {
-    return mobility_for_player_limited(state, player, MOBILITY_SAMPLE_LIMIT);
+    GungiPlayer opponent = gungi_opponent(player);
+    int marshal_x = -1;
+    int marshal_y = -1;
+
+    if (state == NULL || !find_top_marshal_local(state, opponent, &marshal_x, &marshal_y)) {
+        return 0;
+    }
+
+    return gungi_is_square_attacked(state, marshal_x, marshal_y, player);
+}
+
+static int own_marshal_directly_attacked(const GameState *state, GungiPlayer player)
+{
+    GungiPlayer opponent = gungi_opponent(player);
+    int marshal_x = -1;
+    int marshal_y = -1;
+
+    if (state == NULL || !find_top_marshal_local(state, player, &marshal_x, &marshal_y)) {
+        return 0;
+    }
+
+    return gungi_is_square_attacked(state, marshal_x, marshal_y, opponent);
 }
 
 int gungi_q_capture_value(const GameState *state, Move move)
@@ -222,206 +204,57 @@ int gungi_q_capture_value(const GameState *state, Move move)
     return total;
 }
 
-static float enemy_marshal_distance_score(const GameState *state, GungiPlayer player, int marshal_x, int marshal_y)
-{
-    int best_distance = 16;
-    int found = 0;
-    int y;
-    int x;
-
-    for (y = 0; y < GUNGI_BOARD_SIZE; ++y) {
-        for (x = 0; x < GUNGI_BOARD_SIZE; ++x) {
-            if (gungi_cell_height(state, x, y) > 0) {
-                Piece top = gungi_top_piece(state, x, y);
-                if (top.owner == player) {
-                    int distance = manhattan_distance(x, y, marshal_x, marshal_y);
-                    if (!found || distance < best_distance) {
-                        best_distance = distance;
-                        found = 1;
-                    }
-                }
-            }
-        }
-    }
-
-    if (!found) {
-        return 0.0f;
-    }
-
-    return clamp_float((16.0f - (float)best_distance) / 16.0f, 0.0f, 1.0f);
-}
-
-static void add_top_three(float scores[3], float value)
-{
-    int i;
-
-    for (i = 0; i < 3; ++i) {
-        if (value > scores[i]) {
-            int j;
-            for (j = 2; j > i; --j) {
-                scores[j] = scores[j - 1];
-            }
-            scores[i] = value;
-            return;
-        }
-    }
-}
-
-static float enemy_marshal_pressure(const GameState *state, GungiPlayer player, int marshal_x, int marshal_y)
-{
-    float pressure = 0.0f;
-    int adjacent_control = 0;
-    float near_scores[3] = { 0.0f, 0.0f, 0.0f };
-    int dy;
-    int dx;
-    int y;
-    int x;
-
-    if (gungi_is_square_attacked(state, marshal_x, marshal_y, player)) {
-        pressure += 1.0f;
-    }
-
-    for (dy = -1; dy <= 1; ++dy) {
-        for (dx = -1; dx <= 1; ++dx) {
-            int tx = marshal_x + dx;
-            int ty = marshal_y + dy;
-            if ((dx != 0 || dy != 0) && in_bounds(tx, ty) &&
-                gungi_is_square_attacked(state, tx, ty, player)) {
-                adjacent_control++;
-            }
-        }
-    }
-    pressure += (float)adjacent_control * 0.15f;
-
-    for (y = 0; y < GUNGI_BOARD_SIZE; ++y) {
-        for (x = 0; x < GUNGI_BOARD_SIZE; ++x) {
-            if (gungi_cell_height(state, x, y) > 0) {
-                Piece top = gungi_top_piece(state, x, y);
-                if (top.owner == player) {
-                    int distance = manhattan_distance(x, y, marshal_x, marshal_y);
-                    float score = (float)(4 - distance) / 4.0f;
-                    if (score > 0.0f) {
-                        add_top_three(near_scores, score);
-                    }
-                }
-            }
-        }
-    }
-    pressure += (near_scores[0] + near_scores[1] + near_scores[2]) * 0.10f;
-
-    return pressure;
-}
-
-static void attack_progress_for_player(const GameState *state, GungiPlayer player, float *pressure, float *distance_score)
-{
-    GungiPlayer opponent;
-    int marshal_x = -1;
-    int marshal_y = -1;
-
-    if (pressure != NULL) {
-        *pressure = 0.0f;
-    }
-    if (distance_score != NULL) {
-        *distance_score = 0.0f;
-    }
-    if (state == NULL) {
-        return;
-    }
-
-    opponent = gungi_opponent(player);
-    if (!find_top_marshal_local(state, opponent, &marshal_x, &marshal_y)) {
-        return;
-    }
-
-    if (pressure != NULL) {
-        *pressure = enemy_marshal_pressure(state, player, marshal_x, marshal_y);
-    }
-    if (distance_score != NULL) {
-        *distance_score = enemy_marshal_distance_score(state, player, marshal_x, marshal_y);
-    }
-}
-
-static float own_marshal_pressure_for_player(const GameState *state, GungiPlayer player)
-{
-    GungiPlayer opponent = gungi_opponent(player);
-    int marshal_x = -1;
-    int marshal_y = -1;
-
-    if (state == NULL || !find_top_marshal_local(state, player, &marshal_x, &marshal_y)) {
-        return 0.0f;
-    }
-
-    return enemy_marshal_pressure(state, opponent, marshal_x, marshal_y);
-}
-
-static int own_marshal_directly_attacked(const GameState *state, GungiPlayer player)
-{
-    GungiPlayer opponent = gungi_opponent(player);
-    int marshal_x = -1;
-    int marshal_y = -1;
-
-    if (state == NULL || !find_top_marshal_local(state, player, &marshal_x, &marshal_y)) {
-        return 0;
-    }
-
-    return gungi_is_square_attacked(state, marshal_x, marshal_y, opponent);
-}
-
-static int player_has_immediate_win(const GameState *state, GungiPlayer player)
-{
-    GameState turn_state;
-    Move replies[GUNGI_MAX_LEGAL_MOVES];
-    int count;
-    int i;
-
-    if (state == NULL || state->status != GUNGI_STATUS_ONGOING) {
-        return 0;
-    }
-
-    turn_state = *state;
-    turn_state.current_player = player;
-    count = gungi_generate_legal_moves(&turn_state, replies, GUNGI_MAX_LEGAL_MOVES);
-    for (i = 0; i < count; ++i) {
-        GameState trial = turn_state;
-        RulesResult result = gungi_apply_move(&trial, replies[i]);
-        if (result.ok &&
-            (trial.status == GUNGI_STATUS_BLACK_WIN ||
-             trial.status == GUNGI_STATUS_WHITE_WIN ||
-             trial.status == GUNGI_STATUS_RESIGNED) &&
-            trial.winner == player) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
 static void extract_value_features(float features[GUNGI_V_FEATURE_COUNT], const GameState *state)
 {
     GungiPlayer player = state->current_player;
     GungiPlayer opponent = gungi_opponent(player);
-    int own_material = material_for_player(state, player);
-    int opp_material = material_for_player(state, opponent);
-    int marshal_x = -1;
-    int marshal_y = -1;
-    int reps;
+    int board_counts[2][GUNGI_PIECE_TYPE_COUNT];
+    int stack_levels[2][GUNGI_PIECE_TYPE_COUNT];
+    int index = 0;
+    int y;
+    int x;
+    int level;
+    int type;
 
     memset(features, 0, sizeof(float) * GUNGI_V_FEATURE_COUNT);
+    memset(board_counts, 0, sizeof(board_counts));
+    memset(stack_levels, 0, sizeof(stack_levels));
 
-    features[0] = 1.0f;
-    features[1] = (float)(own_material - opp_material) / 10000.0f;
+    features[index++] = 1.0f;
 
-    if (find_top_marshal_local(state, opponent, &marshal_x, &marshal_y)) {
-        features[2] = enemy_marshal_pressure(state, player, marshal_x, marshal_y);
-        features[3] = enemy_marshal_distance_score(state, player, marshal_x, marshal_y);
+    for (y = 0; y < GUNGI_BOARD_SIZE; ++y) {
+        for (x = 0; x < GUNGI_BOARD_SIZE; ++x) {
+            int height = gungi_cell_height(state, x, y);
+            for (level = 0; level < height; ++level) {
+                Piece piece = gungi_stack_piece(state, x, y, level);
+                if (piece.owner == GUNGI_PLAYER_BLACK || piece.owner == GUNGI_PLAYER_WHITE) {
+                    board_counts[piece.owner][piece.type]++;
+                    stack_levels[piece.owner][piece.type] += level + 1;
+                }
+            }
+        }
     }
 
-    features[4] = (float)mobility_for_player(state, player) / 200.0f;
-    features[5] = (float)mobility_for_player(state, opponent) / 200.0f;
+    for (type = GUNGI_PIECE_NONE + 1; type < GUNGI_PIECE_TYPE_COUNT; ++type) {
+        features[index++] =
+            (float)(board_counts[player][type] - board_counts[opponent][type]) / BOARD_COUNT_SCALE;
+    }
 
-    reps = gungi_count_repetition(state, gungi_position_hash(state));
-    features[6] = reps > 1 ? (float)-(reps - 1) : 0.0f;
-    features[7] = -clamp_float((float)state->ply_count / 600.0f, 0.0f, 1.0f);
+    features[index++] =
+        (float)(mobility_for_player(state, player) - mobility_for_player(state, opponent)) / MOBILITY_SCALE;
+
+    for (type = GUNGI_PIECE_NONE + 1; type < GUNGI_PIECE_TYPE_COUNT; ++type) {
+        features[index++] =
+            (float)(stack_levels[player][type] - stack_levels[opponent][type]) / STACK_LEVEL_SCALE;
+    }
+
+    for (type = GUNGI_PIECE_NONE + 1; type < GUNGI_PIECE_TYPE_COUNT; ++type) {
+        features[index++] =
+            (float)(gungi_hand_count(state, player, (GungiPieceType)type) -
+                    gungi_hand_count(state, opponent, (GungiPieceType)type)) / HAND_COUNT_SCALE;
+    }
+
+    features[index++] = player_attacks_enemy_marshal(state, player) ? 1.0f : 0.0f;
 }
 
 float gungi_v_evaluate(const GungiQModel *model, const GameState *state)
@@ -469,32 +302,13 @@ void gungi_v_update(GungiQModel *model, const GameState *state, float target, fl
 
 float gungi_v_immediate_reward(const GameState *before, Move move, const GameState *after, const RulesResult *result, int timeout)
 {
-    float reward = -0.003f;
+    float reward = -0.005f;
     int capture_value = gungi_q_capture_value(before, move);
-    float pressure_before = 0.0f;
-    float pressure_after = 0.0f;
-    float distance_before = 0.0f;
-    float distance_after = 0.0f;
-    float pressure_delta = 0.0f;
-    float distance_delta = 0.0f;
-    int enemy_mobility_before = 0;
-    int enemy_mobility_after = 0;
-    int own_mobility_before = 0;
-    int own_mobility_after = 0;
-    float enemy_mobility_delta = 0.0f;
-    float own_mobility_delta = 0.0f;
-    float own_pressure_before = 0.0f;
-    float own_pressure_after = 0.0f;
-    float own_pressure_delta = 0.0f;
-    int own_direct_before = 0;
-    int own_direct_after = 0;
-    int was_under_threat = 0;
-    int made_progress = 0;
     int repetition_count = 0;
     RulesResult local_result;
 
     if (capture_value > 0) {
-        reward += (float)capture_value / 8000.0f;
+        reward += (float)capture_value / 10000.0f;
     }
 
     if (result == NULL) {
@@ -503,78 +317,26 @@ float gungi_v_immediate_reward(const GameState *before, Move move, const GameSta
     }
 
     if (result->gives_check) {
-        reward += 0.06f;
+        reward += 0.05f;
     }
 
     if (before != NULL && after != NULL) {
-        GungiPlayer mover = move.player;
-        GungiPlayer opponent = gungi_opponent(mover);
-        float ply_ratio = clamp_float((float)before->ply_count / 600.0f, 0.0f, 1.0f);
+        float ply_ratio = clamp_float((float)before->ply_count / TRAINING_PLY_LIMIT, 0.0f, 1.0f);
+        int own_direct_before = own_marshal_directly_attacked(before, move.player);
+        int own_direct_after = own_marshal_directly_attacked(after, move.player);
 
         reward -= 0.004f * ply_ratio;
-        reward -= 0.012f * ply_ratio * ply_ratio;
-
-        attack_progress_for_player(before, mover, &pressure_before, &distance_before);
-        attack_progress_for_player(after, mover, &pressure_after, &distance_after);
-        pressure_delta = pressure_after - pressure_before;
-        distance_delta = distance_after - distance_before;
-
-        enemy_mobility_before = mobility_for_player_limited(before, opponent, REWARD_MOBILITY_SAMPLE_LIMIT);
-        enemy_mobility_after = mobility_for_player_limited(after, opponent, REWARD_MOBILITY_SAMPLE_LIMIT);
-        own_mobility_before = mobility_for_player_limited(before, mover, REWARD_MOBILITY_SAMPLE_LIMIT);
-        own_mobility_after = mobility_for_player_limited(after, mover, REWARD_MOBILITY_SAMPLE_LIMIT);
-        enemy_mobility_delta = (float)(enemy_mobility_before - enemy_mobility_after) /
-                               (float)REWARD_MOBILITY_SAMPLE_LIMIT;
-        own_mobility_delta = (float)(own_mobility_after - own_mobility_before) /
-                             (float)REWARD_MOBILITY_SAMPLE_LIMIT;
-
-        reward += 0.12f * pressure_delta;
-        reward += 0.08f * distance_delta;
-        reward += 0.08f * enemy_mobility_delta;
-        reward += 0.01f * own_mobility_delta;
-
-        own_pressure_before = own_marshal_pressure_for_player(before, mover);
-        own_pressure_after = own_marshal_pressure_for_player(after, mover);
-        own_pressure_delta = own_pressure_after - own_pressure_before;
-        own_direct_before = own_marshal_directly_attacked(before, mover);
-        own_direct_after = own_marshal_directly_attacked(after, mover);
-        was_under_threat = own_direct_before || own_pressure_before >= 0.75f;
-
-        if (own_pressure_delta > 0.02f) {
-            reward -= 0.24f * own_pressure_delta;
-        } else if (was_under_threat && own_pressure_delta < -0.05f) {
-            reward += 0.08f * -own_pressure_delta;
-        }
 
         if (own_direct_after) {
-            reward -= 0.45f;
+            reward -= 0.8f;
         }
-
         if (own_direct_before && !own_direct_after) {
-            reward += 0.18f;
-        }
-
-        if (after->status == GUNGI_STATUS_ONGOING &&
-            player_has_immediate_win(after, opponent)) {
-            reward -= 2.0f;
+            reward += 0.25f;
         }
 
         repetition_count = gungi_count_repetition(after, gungi_position_hash(after));
         if (repetition_count > 1) {
-            reward -= 0.15f * (float)(repetition_count - 1);
-            made_progress = 0;
-        }
-
-        if (capture_value > 0 || result->gives_check ||
-            pressure_delta > 0.01f || distance_delta > 0.01f || enemy_mobility_delta > 0.01f) {
-            made_progress = 1;
-        }
-
-        if (!made_progress) {
-            reward -= 0.02f;
-            if (reward > -0.006f) {
-                reward = -0.006f;
-            }
+            reward -= 0.2f * (float)(repetition_count - 1);
         }
     }
 
@@ -582,14 +344,14 @@ float gungi_v_immediate_reward(const GameState *before, Move move, const GameSta
         if (after->status == GUNGI_STATUS_BLACK_WIN ||
             after->status == GUNGI_STATUS_WHITE_WIN ||
             after->status == GUNGI_STATUS_RESIGNED) {
-            reward += after->winner == move.player ? 1.5f : -1.5f;
+            reward += after->winner == move.player ? 2.0f : -2.0f;
         } else if (after->status == GUNGI_STATUS_DRAW) {
-            reward -= 0.8f;
+            reward -= 1.0f;
         }
     }
 
     if (timeout) {
-        reward -= 1.0f;
+        reward -= 1.2f;
     }
 
     return reward;
@@ -622,7 +384,9 @@ float gungi_v_score_move(const GungiQModel *model, const GameState *before, Move
 Move gungi_get_q_move(const GameState *state, const GungiQModel *model, float epsilon)
 {
     Move moves[GUNGI_MAX_LEGAL_MOVES];
-    int count = gungi_generate_legal_moves(state, moves, GUNGI_MAX_LEGAL_MOVES);
+    int move_limit = epsilon > 0.0f ? TRAINING_GENERATED_MOVE_LIMIT : GUNGI_MAX_LEGAL_MOVES;
+    int count = gungi_generate_legal_moves(state, moves, move_limit);
+    int score_count = count;
     int best_index = 0;
     float best_score = -FLT_MAX;
     const GungiQProfileConfig *config;
@@ -636,8 +400,18 @@ Move gungi_get_q_move(const GameState *state, const GungiQModel *model, float ep
         return moves[rand() % count];
     }
 
+    if (epsilon > 0.0f && score_count > TRAINING_CANDIDATE_LIMIT) {
+        score_count = TRAINING_CANDIDATE_LIMIT;
+        for (i = 0; i < score_count; ++i) {
+            int j = i + rand() % (count - i);
+            Move temp = moves[i];
+            moves[i] = moves[j];
+            moves[j] = temp;
+        }
+    }
+
     config = gungi_q_profile_config(model->profile);
-    for (i = 0; i < count; ++i) {
+    for (i = 0; i < score_count; ++i) {
         float score = gungi_v_score_move(model, state, moves[i], config->gamma);
         if (score > best_score) {
             best_score = score;
