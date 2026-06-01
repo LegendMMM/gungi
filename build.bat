@@ -54,7 +54,7 @@ if not exist "%ROOT%tests\test_rules.c" (
 if not exist "%ROOT%tests" mkdir "%ROOT%tests"
 
 echo Building gungi.exe...
-"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%RAYLIB_DIR%\src" -I"%ROOT%src" "%ROOT%src\ai_core.c" "%ROOT%src\main.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%gungi.exe" -L"%RAYLIB_DIR%\src" -lraylib -lopengl32 -lgdi32 -lwinmm -fopenmp
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%RAYLIB_DIR%\src" -I"%ROOT%src" "%ROOT%src\ai_core.c" "%ROOT%src\value_model.c" "%ROOT%src\main.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%gungi.exe" -L"%RAYLIB_DIR%\src" -lraylib -lopengl32 -lgdi32 -lwinmm -lm -fopenmp
 if errorlevel 1 (
     echo [error] Failed to build gungi.exe.
     exit /b 1
@@ -67,7 +67,39 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Building tests\test_value_model.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tests\test_value_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\value_model.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tests\test_value_model.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tests\test_value_model.exe.
+    exit /b 1
+)
+
+echo Building tools\gen_value_data.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\gen_value_data.c" "%ROOT%src\ai_core.c" "%ROOT%src\value_model.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\gen_value_data.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\gen_value_data.exe.
+    exit /b 1
+)
+
+echo Building tools\train_value.exe...
+"%GCC%" -O3 -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\train_value.c" "%ROOT%src\value_model.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\train_value.exe" -lm
+if errorlevel 1 (
+    echo [error] Failed to build tools\train_value.exe.
+    exit /b 1
+)
+
+echo Building tools\eval_value_ai.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\eval_value_ai.c" "%ROOT%src\ai_core.c" "%ROOT%src\value_model.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\eval_value_ai.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\eval_value_ai.exe.
+    exit /b 1
+)
+
 echo Build completed:
 echo   %ROOT%gungi.exe
 echo   %ROOT%tests\test_rules.exe
+echo   %ROOT%tests\test_value_model.exe
+echo   %ROOT%tools\gen_value_data.exe
+echo   %ROOT%tools\train_value.exe
+echo   %ROOT%tools\eval_value_ai.exe
 exit /b 0

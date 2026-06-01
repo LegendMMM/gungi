@@ -4,11 +4,17 @@
 *.pdb
 *.ilk
 *.csv
+*.log
 
 gungi.exe
 tests/test_rules.exe
+tests/test_value_model.exe
 gungi
 tests/test_rules
+tests/test_value_model
+tools/*.exe
+models/*.bin
+value_model_test.bin
 
 build/
 out/
