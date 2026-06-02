@@ -1,0 +1,11 @@
+model_player,original_player,status,winner,ply,timed_out
+B,W,draw,-,533,0
+B,W,draw,-,135,0
+B,W,draw,-,337,0
+B,W,draw,-,353,0
+B,W,draw,-,375,0
+W,B,draw,-,534,0
+W,B,resigned,B,118,0
+W,B,draw,-,388,0
+W,B,draw,-,374,0
+W,B,draw,-,400,0

@@ -82,9 +82,25 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Building tools\compare_model_minimax.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\compare_model_minimax.c" "%ROOT%src\q_search.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\compare_model_minimax.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\compare_model_minimax.exe.
+    exit /b 1
+)
+
+echo Building tools\train_q_from_hybrid.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\train_q_from_hybrid.c" "%ROOT%src\q_search.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\train_q_from_hybrid.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\train_q_from_hybrid.exe.
+    exit /b 1
+)
+
 echo Build completed:
 echo   %ROOT%gungi.exe
 echo   %ROOT%tests\test_rules.exe
 echo   %ROOT%tools\train_q.exe
 echo   %ROOT%tools\eval_q.exe
+echo   %ROOT%tools\compare_model_minimax.exe
+echo   %ROOT%tools\train_q_from_hybrid.exe
 exit /b 0

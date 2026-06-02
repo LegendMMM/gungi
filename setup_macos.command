@@ -35,18 +35,38 @@ if [ ! -f "$RAYLIB_LIB" ]; then
 fi
 
 echo "[setup] Building Gungi..."
-mkdir -p tests
+mkdir -p tests tools
 
 clang -O3 -std=c99 -Wall -Wextra -pedantic \
   -Isrc \
-  tests/test_rules.c src/gungi_rules.c \
+  tests/test_rules.c src/ai_core.c src/gungi_rules.c \
   -o tests/test_rules
 
 clang -O3 -std=c99 -Wall -Wextra -pedantic \
   -Isrc -I"$RAYLIB_DIR/src" \
-  src/ai_core.c src/main.c src/gungi_rules.c "$RAYLIB_LIB" \
+  src/ai_core.c src/q_model.c src/main.c src/gungi_rules.c "$RAYLIB_LIB" \
   -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo \
   -o gungi
+
+clang -O3 -std=c99 -Wall -Wextra -pedantic \
+  -Isrc \
+  tools/train_q.c src/q_model.c src/ai_core.c src/gungi_rules.c \
+  -o tools/train_q
+
+clang -O3 -std=c99 -Wall -Wextra -pedantic \
+  -Isrc \
+  tools/eval_q.c src/q_model.c src/ai_core.c src/gungi_rules.c \
+  -o tools/eval_q
+
+clang -O3 -std=c99 -Wall -Wextra -pedantic \
+  -Isrc \
+  tools/compare_model_minimax.c src/q_search.c src/q_model.c src/ai_core.c src/gungi_rules.c \
+  -o tools/compare_model_minimax
+
+clang -O3 -std=c99 -Wall -Wextra -pedantic \
+  -Isrc \
+  tools/train_q_from_hybrid.c src/q_search.c src/q_model.c src/ai_core.c src/gungi_rules.c \
+  -o tools/train_q_from_hybrid
 
 echo "[setup] Running rules tests..."
 ./tests/test_rules

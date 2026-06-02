@@ -7,6 +7,10 @@
 *.log
 !train_30000.log
 !train_100000.log
+!model_minimax_qsearch*.csv
+!train_hybrid_student*.log
+!train_hybrid_student*.csv
+!hybrid_student*.csv
 
 gungi.exe
 tests/test_rules.exe

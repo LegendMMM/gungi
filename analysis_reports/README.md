@@ -11,3 +11,4 @@ analysis reports.
 - `model_minimax_comparison_analysis.md` - early ad-hoc model-guided minimax comparison.
 - `hybrid_q_search_stage1_analysis.md` - first formal q_search implementation and scale sweep.
 - `hybrid_q_search_extended_eval.md` - extended q_search evaluation across 1000-ply and 600-ply matches.
+- `hybrid_student_50000_analysis.md` - 50000-sample hybrid-teacher student distillation result.
