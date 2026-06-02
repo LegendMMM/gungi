@@ -65,6 +65,11 @@ clang -O3 -std=c99 -Wall -Wextra -pedantic \
 
 clang -O3 -std=c99 -Wall -Wextra -pedantic \
   -Isrc \
+  tools/compare_q_models.c src/q_search.c src/q_model.c src/ai_core.c src/gungi_rules.c \
+  -o tools/compare_q_models
+
+clang -O3 -std=c99 -Wall -Wextra -pedantic \
+  -Isrc \
   tools/train_q_from_hybrid.c src/q_search.c src/q_model.c src/ai_core.c src/gungi_rules.c \
   -o tools/train_q_from_hybrid
 

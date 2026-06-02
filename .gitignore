@@ -11,6 +11,7 @@
 !train_hybrid_student*.log
 !train_hybrid_student*.csv
 !hybrid_student*.csv
+!hybrid_student*.log
 
 gungi.exe
 tests/test_rules.exe
