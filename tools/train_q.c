@@ -49,7 +49,7 @@ static float weight_checksum(const GungiQModel *model)
     return total;
 }
 
-static void print_weights(const GungiQModel *model)
+static void print_weights(const char *label, int episode, const GungiQModel *model)
 {
     int i;
 
@@ -57,7 +57,11 @@ static void print_weights(const GungiQModel *model)
         return;
     }
 
-    printf("Weights:");
+    if (episode > 0) {
+        printf("%s episode %d | checksum %.6f:", label, episode, weight_checksum(model));
+    } else {
+        printf("%s | checksum %.6f:", label, weight_checksum(model));
+    }
     for (i = 0; i < GUNGI_V_FEATURE_COUNT; ++i) {
         printf(" w%d=%.6f", i, model->weights[i]);
     }
@@ -261,6 +265,8 @@ int main(int argc, char **argv)
             }
         }
 
+        print_weights("Weights", episode, &model);
+
         if (episode % 500 == 0 || episode == episodes) {
             float avg_ply = (float)total_ply / (float)episode;
             printf("Episode %d/%d | B %d W %d D %d T %d | avg ply %.1f | epsilon %.3f\n",
@@ -290,6 +296,6 @@ int main(int argc, char **argv)
     }
 
     printf("Saved %s | weight checksum %.6f\n", model_path, weight_checksum(&verify_model));
-    print_weights(&verify_model);
+    print_weights("Saved weights", 0, &verify_model);
     return 0;
 }
