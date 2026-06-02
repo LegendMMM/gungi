@@ -16,13 +16,15 @@
 #define DEFAULT_LEARNING_RATE 0.01f
 #define DEFAULT_L2 0.00001f
 #define LINE_BUFFER_SIZE 32768
-#define DEFAULT_TRAINING_LOG_PATH "value_training_log.csv"
+#define DEFAULT_TRAINING_LOG_PATH "train_value_v2.csv"
+#define DATASET_SCHEMA_PREFIX "#gungi_value_schema,"
 
 typedef struct Dataset {
     float *features;
     float *targets;
     int count;
     int capacity;
+    int schema_version;
 } Dataset;
 
 static void ensure_models_dir(void)
@@ -71,7 +73,14 @@ static int parse_row(char *line, Dataset *data)
     char *end = NULL;
     int i;
 
-    if (line == NULL || line[0] == '\0' || line[0] == 't') {
+    if (line == NULL || line[0] == '\0') {
+        return 1;
+    }
+    if (strncmp(line, DATASET_SCHEMA_PREFIX, strlen(DATASET_SCHEMA_PREFIX)) == 0) {
+        data->schema_version = atoi(line + strlen(DATASET_SCHEMA_PREFIX));
+        return 1;
+    }
+    if (line[0] == '#' || line[0] == 't') {
         return 1;
     }
 
@@ -118,6 +127,14 @@ static int load_dataset(const char *path, Dataset *data)
     }
 
     fclose(file);
+    if (data->schema_version != GUNGI_VALUE_MODEL_VERSION) {
+        fprintf(stderr,
+                "Dataset schema mismatch in %s: expected %d got %d\n",
+                path,
+                GUNGI_VALUE_MODEL_VERSION,
+                data->schema_version);
+        return 0;
+    }
     return data->count > 0;
 }
 
@@ -169,7 +186,7 @@ static void shuffle_indices(int *indices, int count)
 static void write_log_header(FILE *log)
 {
     fprintf(log,
-            "run_timestamp,data_path,model_path,rows,train_rows,val_rows,epochs,learning_rate,l2,epoch,train_mse,val_mse\n");
+            "run_timestamp,model_version,feature_count,data_path,model_path,rows,train_rows,val_rows,epochs,learning_rate,l2,epoch,train_mse,val_mse\n");
 }
 
 int main(int argc, char **argv)
@@ -183,11 +200,15 @@ int main(int argc, char **argv)
     long run_timestamp = (long)time(NULL);
     Dataset data;
     GungiValueModel model;
+    float best_weights[GUNGI_VALUE_FEATURE_COUNT];
     FILE *log_file;
     int *indices;
     int train_count;
+    int val_count;
     int epoch;
     int i;
+    float best_val_mse = 0.0f;
+    int best_epoch = 0;
 
     memset(&data, 0, sizeof(data));
     if (epochs <= 0) {
@@ -221,9 +242,11 @@ int main(int argc, char **argv)
     if (train_count <= 0) {
         train_count = data.count;
     }
+    val_count = data.count - train_count;
 
     gungi_value_init(&model);
     model.loaded = 1;
+    memset(best_weights, 0, sizeof(best_weights));
 
     log_file = fopen(log_path, "w");
     if (log_file == NULL) {
@@ -241,6 +264,7 @@ int main(int argc, char **argv)
     for (epoch = 1; epoch <= epochs; ++epoch) {
         float train_mse;
         float val_mse;
+        float monitor_mse;
 
         shuffle_indices(indices, train_count);
 
@@ -260,13 +284,21 @@ int main(int argc, char **argv)
 
         train_mse = mse_for_range(&data, &model, indices, 0, train_count);
         val_mse = mse_for_range(&data, &model, indices, train_count, data.count);
+        monitor_mse = val_count > 0 ? val_mse : train_mse;
+        if (best_epoch == 0 || monitor_mse < best_val_mse) {
+            best_val_mse = monitor_mse;
+            best_epoch = epoch;
+            memcpy(best_weights, model.weights, sizeof(best_weights));
+        }
         printf("epoch %d train_mse=%.8f val_mse=%.8f\n",
                epoch,
                train_mse,
                val_mse);
         fprintf(log_file,
-                "%ld,%s,%s,%d,%d,%d,%d,%.8f,%.10f,%d,%.8f,%.8f\n",
+                "%ld,%d,%d,%s,%s,%d,%d,%d,%d,%.8f,%.10f,%d,%.8f,%.8f\n",
                 run_timestamp,
+                GUNGI_VALUE_MODEL_VERSION,
+                GUNGI_VALUE_FEATURE_COUNT,
                 data_path,
                 model_path,
                 data.count,
@@ -282,6 +314,7 @@ int main(int argc, char **argv)
     }
 
     ensure_models_dir();
+    memcpy(model.weights, best_weights, sizeof(model.weights));
     if (!gungi_value_save(&model, model_path)) {
         fprintf(stderr, "Failed to save %s\n", model_path);
         fclose(log_file);
@@ -291,7 +324,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    printf("Saved %s\n", model_path);
+    printf("Saved %s from best_epoch=%d best_%s_mse=%.8f\n",
+           model_path,
+           best_epoch,
+           val_count > 0 ? "val" : "train",
+           best_val_mse);
     printf("Training log saved %s\n", log_path);
     fclose(log_file);
     free(indices);

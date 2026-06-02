@@ -41,6 +41,24 @@ static void test_features_do_not_mutate_state(void)
     CHECK(memcmp(&state, &before, sizeof(state)) == 0);
 }
 
+static void test_features_ignore_ply_count(void)
+{
+    GameState state_a;
+    GameState state_b;
+    float features_a[GUNGI_VALUE_FEATURE_COUNT];
+    float features_b[GUNGI_VALUE_FEATURE_COUNT];
+
+    gungi_init(&state_a);
+    state_b = state_a;
+    state_a.ply_count = 100;
+    state_b.ply_count = 1000;
+
+    gungi_value_extract_features(&state_a, features_a);
+    gungi_value_extract_features(&state_b, features_b);
+
+    CHECK(memcmp(features_a, features_b, sizeof(features_a)) == 0);
+}
+
 static void test_model_save_load_round_trip(void)
 {
     const char *path = "value_model_test.bin";
@@ -59,6 +77,30 @@ static void test_model_save_load_round_trip(void)
     CHECK(loaded.loaded);
     CHECK(loaded.weights[0] == model.weights[0]);
     CHECK(loaded.weights[17] == model.weights[17]);
+    remove(path);
+}
+
+static void test_legacy_v1_model_is_rejected(void)
+{
+    const char *path = "value_model_test.bin";
+    const char magic[8] = { 'G', 'U', 'N', 'G', 'I', 'V', 'A', '1' };
+    int feature_count = GUNGI_VALUE_FEATURE_COUNT;
+    float weights[GUNGI_VALUE_FEATURE_COUNT];
+    GungiValueModel loaded;
+    FILE *file;
+
+    memset(weights, 0, sizeof(weights));
+    remove(path);
+    file = fopen(path, "wb");
+    CHECK(file != NULL);
+    CHECK(fwrite(magic, sizeof(magic), 1, file) == 1);
+    CHECK(fwrite(&feature_count, sizeof(feature_count), 1, file) == 1);
+    CHECK(fwrite(weights, sizeof(float), GUNGI_VALUE_FEATURE_COUNT, file) == GUNGI_VALUE_FEATURE_COUNT);
+    fclose(file);
+
+    gungi_value_init(&loaded);
+    CHECK(!gungi_value_load(&loaded, path));
+    CHECK(!loaded.loaded);
     remove(path);
 }
 
@@ -94,7 +136,9 @@ int main(void)
 {
     test_zero_model_is_stable();
     test_features_do_not_mutate_state();
+    test_features_ignore_ply_count();
     test_model_save_load_round_trip();
+    test_legacy_v1_model_is_rejected();
     test_public_move_generator_returns_valid_moves();
     test_ai_moves_are_legal();
 

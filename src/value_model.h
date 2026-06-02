@@ -4,7 +4,8 @@
 #include "gungi_rules.h"
 
 #define GUNGI_VALUE_FEATURE_COUNT 192
-#define GUNGI_VALUE_DEFAULT_MODEL_PATH "models/value_weights.bin"
+#define GUNGI_VALUE_MODEL_VERSION 2
+#define GUNGI_VALUE_DEFAULT_MODEL_PATH "models/value_weights_v2.bin"
 #define GUNGI_VALUE_MODEL_ENV "GUNGI_VALUE_MODEL"
 #define GUNGI_VALUE_SCORE_SCALE 2000.0f
 

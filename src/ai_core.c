@@ -7,9 +7,11 @@
 typedef struct ScoredMove {
     Move move;
     int score;
+    int tactical_priority;
 } ScoredMove;
 
-#define VALUE_AI_INTERNAL_TOP_K 8
+#define VALUE_AI_INTERNAL_TOP_K 24
+#define VALUE_AI_TACTICAL_KEEP 6
 
 void gungi_ai_stats_clear(GungiAiSearchStats *stats)
 {
@@ -363,6 +365,29 @@ static int compare_scored_asc(const void *left, const void *right)
     return 0;
 }
 
+static int tactical_priority_for_result(int was_in_check, RulesResult result, const GameState *after)
+{
+    int priority = 0;
+
+    if (after != NULL && after->status != GUNGI_STATUS_ONGOING) {
+        priority = 5;
+    }
+    if (result.captured_marshal) {
+        priority = 5;
+    } else if (result.captured_count > 0 && result.gives_check && priority < 4) {
+        priority = 4;
+    } else if (result.captured_count > 0 && priority < 3) {
+        priority = 3;
+    } else if (result.gives_check && priority < 2) {
+        priority = 2;
+    }
+    if (was_in_check && priority < 1) {
+        priority = 1;
+    }
+
+    return priority;
+}
+
 static int order_moves_by_value(const GameState *state,
                                 const GungiValueModel *model,
                                 ScoredMove *ordered,
@@ -370,13 +395,18 @@ static int order_moves_by_value(const GameState *state,
 {
     Move moves[GUNGI_MAX_LEGAL_MOVES];
     int count = gungi_generate_legal_moves(state, moves, max_moves);
+    int was_in_check = state != NULL && gungi_is_in_check(state, state->current_player);
     int i;
 
     for (i = 0; i < count; ++i) {
         GameState next_state = *state;
+        RulesResult result;
         ordered[i].move = moves[i];
-        if (gungi_apply_move(&next_state, moves[i]).ok) {
+        ordered[i].tactical_priority = 0;
+        result = gungi_apply_move(&next_state, moves[i]);
+        if (result.ok) {
             ordered[i].score = value_leaf_score(model, &next_state);
+            ordered[i].tactical_priority = tactical_priority_for_result(was_in_check, result, &next_state);
         } else {
             ordered[i].score = state->current_player == GUNGI_PLAYER_BLACK ? -INT_MAX : INT_MAX;
         }
@@ -391,6 +421,85 @@ static int order_moves_by_value(const GameState *state,
     return count;
 }
 
+static int move_already_selected(const ScoredMove *selected, int count, Move move)
+{
+    int i;
+
+    for (i = 0; i < count; ++i) {
+        if (same_move(selected[i].move, move)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int select_value_search_moves(const ScoredMove *ordered,
+                                     int count,
+                                     ScoredMove *selected,
+                                     int top_k,
+                                     int *tactical_available,
+                                     int *tactical_selected)
+{
+    int selected_count = 0;
+    int tactical_limit;
+    int priority;
+    int i;
+
+    if (tactical_available != NULL) {
+        *tactical_available = 0;
+    }
+    if (tactical_selected != NULL) {
+        *tactical_selected = 0;
+    }
+    if (count <= 0 || selected == NULL || ordered == NULL) {
+        return 0;
+    }
+    if (top_k <= 0 || top_k > count) {
+        top_k = count;
+    }
+    if (top_k > VALUE_AI_INTERNAL_TOP_K) {
+        top_k = VALUE_AI_INTERNAL_TOP_K;
+    }
+
+    tactical_limit = top_k / 2;
+    if (tactical_limit < 2) {
+        tactical_limit = 2;
+    }
+    if (tactical_limit > VALUE_AI_TACTICAL_KEEP) {
+        tactical_limit = VALUE_AI_TACTICAL_KEEP;
+    }
+    if (tactical_limit > top_k) {
+        tactical_limit = top_k;
+    }
+
+    for (i = 0; i < count; ++i) {
+        if (ordered[i].tactical_priority > 0 && tactical_available != NULL) {
+            (*tactical_available)++;
+        }
+    }
+
+    for (priority = 5; priority >= 1 && selected_count < tactical_limit; --priority) {
+        for (i = 0; i < count && selected_count < tactical_limit; ++i) {
+            if (ordered[i].tactical_priority == priority &&
+                !move_already_selected(selected, selected_count, ordered[i].move)) {
+                selected[selected_count++] = ordered[i];
+                if (tactical_selected != NULL) {
+                    (*tactical_selected)++;
+                }
+            }
+        }
+    }
+
+    for (i = 0; i < count && selected_count < top_k; ++i) {
+        if (!move_already_selected(selected, selected_count, ordered[i].move)) {
+            selected[selected_count++] = ordered[i];
+        }
+    }
+
+    return selected_count;
+}
+
 static int value_minimax(GameState *state,
                          const GungiValueModel *model,
                          int depth,
@@ -400,6 +509,7 @@ static int value_minimax(GameState *state,
                          GungiAiSearchStats *stats)
 {
     ScoredMove ordered[GUNGI_MAX_LEGAL_MOVES];
+    ScoredMove selected[VALUE_AI_INTERNAL_TOP_K];
     int count;
     int search_count;
     int i;
@@ -423,19 +533,19 @@ static int value_minimax(GameState *state,
         return value_leaf_score(model, state);
     }
 
-    search_count = count;
-    if (top_k > VALUE_AI_INTERNAL_TOP_K) {
-        top_k = VALUE_AI_INTERNAL_TOP_K;
-    }
-    if (top_k > 0 && search_count > top_k) {
-        search_count = top_k;
+    search_count = select_value_search_moves(ordered, count, selected, top_k, NULL, NULL);
+    if (search_count == 0) {
+        if (stats != NULL) {
+            stats->leaves++;
+        }
+        return value_leaf_score(model, state);
     }
 
     if (state->current_player == GUNGI_PLAYER_BLACK) {
         int max_eval = -INT_MAX;
         for (i = 0; i < search_count; ++i) {
             GameState next_state = *state;
-            if (!gungi_apply_move(&next_state, ordered[i].move).ok) {
+            if (!gungi_apply_move(&next_state, selected[i].move).ok) {
                 continue;
             }
             {
@@ -459,7 +569,7 @@ static int value_minimax(GameState *state,
         int min_eval = INT_MAX;
         for (i = 0; i < search_count; ++i) {
             GameState next_state = *state;
-            if (!gungi_apply_move(&next_state, ordered[i].move).ok) {
+            if (!gungi_apply_move(&next_state, selected[i].move).ok) {
                 continue;
             }
             {
@@ -551,8 +661,11 @@ Move gungi_get_value_ai_move(const GameState *state,
                              GungiAiSearchStats *stats)
 {
     ScoredMove ordered[GUNGI_MAX_LEGAL_MOVES];
+    ScoredMove selected[VALUE_AI_INTERNAL_TOP_K];
     int count;
     int search_count;
+    int tactical_available = 0;
+    int tactical_selected = 0;
     int is_black_turn;
     int best_eval;
     Move best_move;
@@ -580,24 +693,31 @@ Move gungi_get_value_ai_move(const GameState *state,
         return gungi_make_resign(state->current_player);
     }
 
-    search_count = count;
-    if (search_count > top_k) {
-        search_count = top_k;
+    search_count = select_value_search_moves(ordered,
+                                             count,
+                                             selected,
+                                             top_k,
+                                             &tactical_available,
+                                             &tactical_selected);
+    if (search_count == 0) {
+        return gungi_make_resign(state->current_player);
     }
 
     if (stats != NULL) {
         stats->root_moves = count;
         stats->searched_root_moves = search_count;
         stats->pruned_root_moves = count - search_count;
+        stats->tactical_root_moves = tactical_available;
+        stats->searched_tactical_root_moves = tactical_selected;
     }
 
     is_black_turn = state->current_player == GUNGI_PLAYER_BLACK;
     best_eval = is_black_turn ? -INT_MAX : INT_MAX;
-    best_move = ordered[0].move;
+    best_move = selected[0].move;
 
     for (i = 0; i < search_count; ++i) {
         GameState next_state = *state;
-        if (!gungi_apply_move(&next_state, ordered[i].move).ok) {
+        if (!gungi_apply_move(&next_state, selected[i].move).ok) {
             continue;
         }
         {
@@ -605,12 +725,12 @@ Move gungi_get_value_ai_move(const GameState *state,
             if (is_black_turn) {
                 if (eval > best_eval) {
                     best_eval = eval;
-                    best_move = ordered[i].move;
+                    best_move = selected[i].move;
                 }
             } else {
                 if (eval < best_eval) {
                     best_eval = eval;
-                    best_move = ordered[i].move;
+                    best_move = selected[i].move;
                 }
             }
         }

@@ -6,7 +6,7 @@
 
 #define GUNGI_MAX_LEGAL_MOVES 2048
 #define GUNGI_VALUE_AI_DEFAULT_DEPTH 2
-#define GUNGI_VALUE_AI_DEFAULT_TOP_K 8
+#define GUNGI_VALUE_AI_DEFAULT_TOP_K 12
 
 typedef struct GungiAiSearchStats {
     long long nodes;
@@ -15,6 +15,8 @@ typedef struct GungiAiSearchStats {
     int root_moves;
     int searched_root_moves;
     int pruned_root_moves;
+    int tactical_root_moves;
+    int searched_tactical_root_moves;
 } GungiAiSearchStats;
 
 void gungi_ai_stats_clear(GungiAiSearchStats *stats);

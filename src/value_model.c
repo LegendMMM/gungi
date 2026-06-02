@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char VALUE_MODEL_MAGIC[8] = { 'G', 'U', 'N', 'G', 'I', 'V', 'A', '1' };
+static const char VALUE_MODEL_MAGIC[8] = { 'G', 'U', 'N', 'G', 'I', 'V', 'A', '2' };
 
 static float clampf_local(float value, float min_value, float max_value)
 {
@@ -206,6 +206,9 @@ void gungi_value_extract_features(const GameState *state, float features[GUNGI_V
     int stack_heights[2][GUNGI_MAX_STACK];
     int material = 0;
     int top_material = 0;
+    int board_totals[2] = { 0, 0 };
+    int hand_totals[2] = { 0, 0 };
+    int top_totals[2] = { 0, 0 };
     int index = 0;
     int y;
     int x;
@@ -234,9 +237,11 @@ void gungi_value_extract_features(const GameState *state, float features[GUNGI_V
                 int value = gungi_value_piece_value(piece.type);
                 if (piece.owner == GUNGI_PLAYER_BLACK || piece.owner == GUNGI_PLAYER_WHITE) {
                     board_counts[piece.owner][piece.type]++;
+                    board_totals[piece.owner]++;
                     material += piece.owner == GUNGI_PLAYER_BLACK ? value : -value;
                     if (level == height - 1) {
                         top_counts[piece.owner][piece.type]++;
+                        top_totals[piece.owner]++;
                         top_material += piece.owner == GUNGI_PLAYER_BLACK ? value : -value;
                         if (height >= 1 && height <= GUNGI_MAX_STACK) {
                             stack_heights[piece.owner][height - 1]++;
@@ -252,6 +257,8 @@ void gungi_value_extract_features(const GameState *state, float features[GUNGI_V
     for (type = GUNGI_PIECE_NONE + 1; type < GUNGI_PIECE_TYPE_COUNT; ++type) {
         hand_counts[GUNGI_PLAYER_BLACK][type] = gungi_hand_count(state, GUNGI_PLAYER_BLACK, (GungiPieceType)type);
         hand_counts[GUNGI_PLAYER_WHITE][type] = gungi_hand_count(state, GUNGI_PLAYER_WHITE, (GungiPieceType)type);
+        hand_totals[GUNGI_PLAYER_BLACK] += hand_counts[GUNGI_PLAYER_BLACK][type];
+        hand_totals[GUNGI_PLAYER_WHITE] += hand_counts[GUNGI_PLAYER_WHITE][type];
         material += hand_counts[GUNGI_PLAYER_BLACK][type] * gungi_value_piece_value((GungiPieceType)type);
         material -= hand_counts[GUNGI_PLAYER_WHITE][type] * gungi_value_piece_value((GungiPieceType)type);
     }
@@ -260,7 +267,12 @@ void gungi_value_extract_features(const GameState *state, float features[GUNGI_V
 
     push_feature(features, &index, 1.0f);
     push_feature(features, &index, state->current_player == GUNGI_PLAYER_BLACK ? 1.0f : -1.0f);
-    push_feature(features, &index, clampf_local((float)state->ply_count / 600.0f, 0.0f, 2.0f));
+    push_feature(features, &index, clampf_local((float)(board_totals[GUNGI_PLAYER_BLACK] + board_totals[GUNGI_PLAYER_WHITE]) / 60.0f, 0.0f, 2.0f));
+    push_feature(features, &index, clampf_local((float)(board_totals[GUNGI_PLAYER_BLACK] - board_totals[GUNGI_PLAYER_WHITE]) / 40.0f, -2.0f, 2.0f));
+    push_feature(features, &index, clampf_local((float)(hand_totals[GUNGI_PLAYER_BLACK] + hand_totals[GUNGI_PLAYER_WHITE]) / 60.0f, 0.0f, 2.0f));
+    push_feature(features, &index, clampf_local((float)(hand_totals[GUNGI_PLAYER_BLACK] - hand_totals[GUNGI_PLAYER_WHITE]) / 40.0f, -2.0f, 2.0f));
+    push_feature(features, &index, clampf_local((float)(top_totals[GUNGI_PLAYER_BLACK] + top_totals[GUNGI_PLAYER_WHITE]) / 40.0f, 0.0f, 2.0f));
+    push_feature(features, &index, clampf_local((float)(top_totals[GUNGI_PLAYER_BLACK] - top_totals[GUNGI_PLAYER_WHITE]) / 40.0f, -2.0f, 2.0f));
     push_feature(features, &index, clampf_local((float)repetition / (float)GUNGI_REPETITION_DRAW_COUNT, 0.0f, 2.0f));
     push_feature(features, &index, clampf_local((float)material / 20000.0f, -2.0f, 2.0f));
     push_feature(features, &index, clampf_local((float)top_material / 20000.0f, -2.0f, 2.0f));
