@@ -5,21 +5,17 @@
 *.ilk
 *.csv
 *.log
+*.samples.bin
 
 gungi.exe
 tests/test_rules.exe
-tests/test_value_model.exe
 gungi
 tests/test_rules
-tests/test_value_model
-tools/*.exe
-models/*.bin
-value_model_test.bin
-analysis/value_model_v*_*/
-analysis/value_model_v*.zip
 
 build/
 out/
 .deps/
+.venv-gpu/
+__pycache__/
 .vs/
 .vscode/

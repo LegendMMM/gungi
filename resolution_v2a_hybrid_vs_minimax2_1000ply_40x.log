@@ -1,0 +1,2 @@
+model=models\vp_resolution_v2a_10000.bin mode=vp-hybrid games_per_side=20 max_ply=1000 seed=626262 depth=2 opponent=minimax2
+summary wins=13 losses=12 draws=15 timeouts=7 black=5-12-3 white=8-0-12

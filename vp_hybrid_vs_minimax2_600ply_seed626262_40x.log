@@ -1,0 +1,2 @@
+model=models\vp_hybrid_student_100000.bin mode=vp-hybrid games_per_side=20 max_ply=600 seed=626262 depth=2 opponent=minimax2
+summary wins=11 losses=4 draws=25 timeouts=23 black=8-4-8 white=3-0-17

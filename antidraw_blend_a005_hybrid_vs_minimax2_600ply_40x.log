@@ -1,0 +1,2 @@
+model=models\vp_antidraw_blend_a005.bin mode=vp-hybrid games_per_side=20 max_ply=600 seed=626262 depth=2 opponent=minimax2
+summary wins=15 losses=12 draws=13 timeouts=10 black=4-12-4 white=11-0-9

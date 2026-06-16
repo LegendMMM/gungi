@@ -2,25 +2,29 @@
 
 #include <limits.h>
 #include <stdlib.h>
-#include <string.h>
 
-typedef struct ScoredMove {
-    Move move;
-    int score;
-    int tactical_priority;
-} ScoredMove;
-
-#define VALUE_AI_INTERNAL_TOP_K 24
-#define VALUE_AI_TACTICAL_KEEP 6
-
-void gungi_ai_stats_clear(GungiAiSearchStats *stats)
+int gungi_piece_value(GungiPieceType type)
 {
-    if (stats != NULL) {
-        memset(stats, 0, sizeof(*stats));
+    switch (type) {
+    case GUNGI_PIECE_MARSHAL: return 10000;
+    case GUNGI_PIECE_GENERAL: return 900;
+    case GUNGI_PIECE_LIEUTENANT: return 600;
+    case GUNGI_PIECE_MAJOR: return 500;
+    case GUNGI_PIECE_CAPTAIN: return 400;
+    case GUNGI_PIECE_SAMURAI: return 350;
+    case GUNGI_PIECE_ARCHER: return 350;
+    case GUNGI_PIECE_CANNON: return 350;
+    case GUNGI_PIECE_MUSKETEER: return 350;
+    case GUNGI_PIECE_KNIGHT: return 300;
+    case GUNGI_PIECE_SPY: return 300;
+    case GUNGI_PIECE_SPEAR: return 250;
+    case GUNGI_PIECE_FORT: return 200;
+    case GUNGI_PIECE_PAWN: return 100;
+    default: return 0;
     }
 }
 
-static int same_move(Move a, Move b)
+int gungi_moves_equal(Move a, Move b)
 {
     return a.kind == b.kind &&
            a.player == b.player &&
@@ -42,7 +46,7 @@ static int append_move(const GameState *state, Move move, Move *moves, int max_m
     }
 
     for (i = 0; i < *count; ++i) {
-        if (same_move(moves[i], move)) {
+        if (gungi_moves_equal(moves[i], move)) {
             return 0;
         }
     }
@@ -61,7 +65,7 @@ static int move_changes_betrayal_target(const GameState *state, Move move)
     if (move.betray_mask == 0) {
         return 1;
     }
-    if (state == NULL || move.betray_mask < 0 || move.betray_mask > 3) {
+    if (move.betray_mask < 0 || move.betray_mask > 3) {
         return 0;
     }
 
@@ -114,7 +118,7 @@ int gungi_evaluate_board(const GameState *state)
             int height = gungi_cell_height(state, x, y);
             if (height > 0) {
                 Piece top = gungi_top_piece(state, x, y);
-                int val = gungi_value_piece_value(top.type);
+                int val = gungi_piece_value(top.type);
 
                 if (height == 2) {
                     val = val * 15 / 10;
@@ -132,7 +136,7 @@ int gungi_evaluate_board(const GameState *state)
     }
 
     for (type = GUNGI_PIECE_NONE + 1; type < GUNGI_PIECE_TYPE_COUNT; ++type) {
-        int val = gungi_value_piece_value((GungiPieceType)type) * 11 / 10;
+        int val = gungi_piece_value((GungiPieceType)type) * 11 / 10;
         score += gungi_hand_count(state, GUNGI_PLAYER_BLACK, (GungiPieceType)type) * val;
         score -= gungi_hand_count(state, GUNGI_PLAYER_WHITE, (GungiPieceType)type) * val;
     }
@@ -180,8 +184,7 @@ int gungi_generate_legal_moves(const GameState *state, Move *moves, int max_move
                             if (target_height <= 0) {
                                 append_move(state, m_move, moves, max_moves, &count);
                             } else {
-                                if (append_move(state, m_stack, moves, max_moves, &count) &&
-                                    top.type == GUNGI_PIECE_CAPTAIN) {
+                                if (append_move(state, m_stack, moves, max_moves, &count) && top.type == GUNGI_PIECE_CAPTAIN) {
                                     append_betrayal_variants(state, m_stack, moves, max_moves, &count);
                                 }
                                 append_move(state, m_cap, moves, max_moves, &count);
@@ -201,8 +204,7 @@ int gungi_generate_legal_moves(const GameState *state, Move *moves, int max_move
             for (ty = 0; ty < GUNGI_BOARD_SIZE; ty++) {
                 for (tx = 0; tx < GUNGI_BOARD_SIZE; tx++) {
                     Move m = gungi_make_drop(player, (GungiPieceType)type, tx, ty);
-                    if (append_move(state, m, moves, max_moves, &count) &&
-                        type == GUNGI_PIECE_CAPTAIN) {
+                    if (append_move(state, m, moves, max_moves, &count) && type == GUNGI_PIECE_CAPTAIN) {
                         append_betrayal_variants(state, m, moves, max_moves, &count);
                     }
                     if (count >= max_moves) {
@@ -216,379 +218,57 @@ int gungi_generate_legal_moves(const GameState *state, Move *moves, int max_move
     return count;
 }
 
-static int terminal_score(const GameState *state)
-{
-    if (state == NULL) {
-        return 0;
-    }
-
-    if (state->status == GUNGI_STATUS_BLACK_WIN) {
-        return 30000;
-    }
-    if (state->status == GUNGI_STATUS_WHITE_WIN) {
-        return -30000;
-    }
-    if (state->status == GUNGI_STATUS_RESIGNED) {
-        if (state->winner == GUNGI_PLAYER_BLACK) {
-            return 30000;
-        }
-        if (state->winner == GUNGI_PLAYER_WHITE) {
-            return -30000;
-        }
-    }
-    if (state->status == GUNGI_STATUS_DRAW) {
-        return 0;
-    }
-
-    return gungi_evaluate_board(state);
-}
-
-static int heuristic_leaf_score(const GameState *state)
-{
-    if (state == NULL || state->status != GUNGI_STATUS_ONGOING) {
-        return terminal_score(state);
-    }
-    return gungi_evaluate_board(state);
-}
-
-static int value_leaf_score(const GungiValueModel *model, const GameState *state)
-{
-    if (state == NULL || state->status != GUNGI_STATUS_ONGOING) {
-        return terminal_score(state);
-    }
-    if (!gungi_value_model_loaded(model)) {
-        return gungi_evaluate_board(state);
-    }
-    return gungi_value_evaluate_board(model, state);
-}
-
-static int minimax_heuristic(GameState *state, int depth, int alpha, int beta)
+static int minimax(GameState *state, int depth, int alpha, int beta, int maximizingPlayer)
 {
     Move moves[GUNGI_MAX_LEGAL_MOVES];
     int count;
     int i;
 
-    if (depth <= 0 || state->status != GUNGI_STATUS_ONGOING) {
-        return heuristic_leaf_score(state);
+    if (depth == 0 || state->status != GUNGI_STATUS_ONGOING) {
+        return gungi_evaluate_board(state) + (rand() % 6);
     }
 
     count = gungi_generate_legal_moves(state, moves, GUNGI_MAX_LEGAL_MOVES);
     if (count == 0) {
-        return heuristic_leaf_score(state);
+        return gungi_evaluate_board(state);
     }
 
-    if (state->current_player == GUNGI_PLAYER_BLACK) {
-        int max_eval = -INT_MAX;
+    if (maximizingPlayer) {
+        int maxEval = -INT_MAX;
         for (i = 0; i < count; i++) {
             GameState next_state = *state;
-            if (!gungi_apply_move(&next_state, moves[i]).ok) {
-                continue;
+            int eval;
+            gungi_apply_move(&next_state, moves[i]);
+            eval = minimax(&next_state, depth - 1, alpha, beta, 0);
+            if (eval > maxEval) {
+                maxEval = eval;
             }
-            {
-                int eval = minimax_heuristic(&next_state, depth - 1, alpha, beta);
-                if (eval > max_eval) {
-                    max_eval = eval;
-                }
-                if (eval > alpha) {
-                    alpha = eval;
-                }
-                if (beta <= alpha) {
-                    break;
-                }
+            if (eval > alpha) {
+                alpha = eval;
+            }
+            if (beta <= alpha) {
+                break;
             }
         }
-        return max_eval;
+        return maxEval;
     } else {
-        int min_eval = INT_MAX;
+        int minEval = INT_MAX;
         for (i = 0; i < count; i++) {
             GameState next_state = *state;
-            if (!gungi_apply_move(&next_state, moves[i]).ok) {
-                continue;
+            int eval;
+            gungi_apply_move(&next_state, moves[i]);
+            eval = minimax(&next_state, depth - 1, alpha, beta, 1);
+            if (eval < minEval) {
+                minEval = eval;
             }
-            {
-                int eval = minimax_heuristic(&next_state, depth - 1, alpha, beta);
-                if (eval < min_eval) {
-                    min_eval = eval;
-                }
-                if (eval < beta) {
-                    beta = eval;
-                }
-                if (beta <= alpha) {
-                    break;
-                }
+            if (eval < beta) {
+                beta = eval;
+            }
+            if (beta <= alpha) {
+                break;
             }
         }
-        return min_eval;
-    }
-}
-
-int gungi_score_ai_position(const GameState *state, int depth)
-{
-    GameState copy;
-
-    if (state == NULL) {
-        return 0;
-    }
-    if (depth <= 0 || state->status != GUNGI_STATUS_ONGOING) {
-        return heuristic_leaf_score(state);
-    }
-
-    copy = *state;
-    return minimax_heuristic(&copy, depth, -INT_MAX, INT_MAX);
-}
-
-static int compare_scored_desc(const void *left, const void *right)
-{
-    const ScoredMove *a = (const ScoredMove *)left;
-    const ScoredMove *b = (const ScoredMove *)right;
-
-    if (a->score < b->score) {
-        return 1;
-    }
-    if (a->score > b->score) {
-        return -1;
-    }
-    return 0;
-}
-
-static int compare_scored_asc(const void *left, const void *right)
-{
-    const ScoredMove *a = (const ScoredMove *)left;
-    const ScoredMove *b = (const ScoredMove *)right;
-
-    if (a->score > b->score) {
-        return 1;
-    }
-    if (a->score < b->score) {
-        return -1;
-    }
-    return 0;
-}
-
-static int tactical_priority_for_result(int was_in_check, RulesResult result, const GameState *after)
-{
-    int priority = 0;
-
-    if (after != NULL && after->status != GUNGI_STATUS_ONGOING) {
-        priority = 5;
-    }
-    if (result.captured_marshal) {
-        priority = 5;
-    } else if (result.captured_count > 0 && result.gives_check && priority < 4) {
-        priority = 4;
-    } else if (result.captured_count > 0 && priority < 3) {
-        priority = 3;
-    } else if (result.gives_check && priority < 2) {
-        priority = 2;
-    }
-    if (was_in_check && priority < 1) {
-        priority = 1;
-    }
-
-    return priority;
-}
-
-static int order_moves_by_value(const GameState *state,
-                                const GungiValueModel *model,
-                                ScoredMove *ordered,
-                                int max_moves)
-{
-    Move moves[GUNGI_MAX_LEGAL_MOVES];
-    int count = gungi_generate_legal_moves(state, moves, max_moves);
-    int was_in_check = state != NULL && gungi_is_in_check(state, state->current_player);
-    int i;
-
-    for (i = 0; i < count; ++i) {
-        GameState next_state = *state;
-        RulesResult result;
-        ordered[i].move = moves[i];
-        ordered[i].tactical_priority = 0;
-        result = gungi_apply_move(&next_state, moves[i]);
-        if (result.ok) {
-            ordered[i].score = value_leaf_score(model, &next_state);
-            ordered[i].tactical_priority = tactical_priority_for_result(was_in_check, result, &next_state);
-        } else {
-            ordered[i].score = state->current_player == GUNGI_PLAYER_BLACK ? -INT_MAX : INT_MAX;
-        }
-    }
-
-    if (state->current_player == GUNGI_PLAYER_BLACK) {
-        qsort(ordered, (size_t)count, sizeof(ordered[0]), compare_scored_desc);
-    } else {
-        qsort(ordered, (size_t)count, sizeof(ordered[0]), compare_scored_asc);
-    }
-
-    return count;
-}
-
-static int move_already_selected(const ScoredMove *selected, int count, Move move)
-{
-    int i;
-
-    for (i = 0; i < count; ++i) {
-        if (same_move(selected[i].move, move)) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-static int select_value_search_moves(const ScoredMove *ordered,
-                                     int count,
-                                     ScoredMove *selected,
-                                     int top_k,
-                                     int *tactical_available,
-                                     int *tactical_selected)
-{
-    int selected_count = 0;
-    int tactical_limit;
-    int priority;
-    int i;
-
-    if (tactical_available != NULL) {
-        *tactical_available = 0;
-    }
-    if (tactical_selected != NULL) {
-        *tactical_selected = 0;
-    }
-    if (count <= 0 || selected == NULL || ordered == NULL) {
-        return 0;
-    }
-    if (top_k <= 0 || top_k > count) {
-        top_k = count;
-    }
-    if (top_k > VALUE_AI_INTERNAL_TOP_K) {
-        top_k = VALUE_AI_INTERNAL_TOP_K;
-    }
-
-    tactical_limit = top_k / 2;
-    if (tactical_limit < 2) {
-        tactical_limit = 2;
-    }
-    if (tactical_limit > VALUE_AI_TACTICAL_KEEP) {
-        tactical_limit = VALUE_AI_TACTICAL_KEEP;
-    }
-    if (tactical_limit > top_k) {
-        tactical_limit = top_k;
-    }
-
-    for (i = 0; i < count; ++i) {
-        if (ordered[i].tactical_priority > 0 && tactical_available != NULL) {
-            (*tactical_available)++;
-        }
-    }
-
-    for (priority = 5; priority >= 1 && selected_count < tactical_limit; --priority) {
-        for (i = 0; i < count && selected_count < tactical_limit; ++i) {
-            if (ordered[i].tactical_priority == priority &&
-                !move_already_selected(selected, selected_count, ordered[i].move)) {
-                selected[selected_count++] = ordered[i];
-                if (tactical_selected != NULL) {
-                    (*tactical_selected)++;
-                }
-            }
-        }
-    }
-
-    for (i = 0; i < count && selected_count < top_k; ++i) {
-        if (!move_already_selected(selected, selected_count, ordered[i].move)) {
-            selected[selected_count++] = ordered[i];
-        }
-    }
-
-    return selected_count;
-}
-
-static int value_minimax(GameState *state,
-                         const GungiValueModel *model,
-                         int depth,
-                         int alpha,
-                         int beta,
-                         int top_k,
-                         GungiAiSearchStats *stats)
-{
-    ScoredMove ordered[GUNGI_MAX_LEGAL_MOVES];
-    ScoredMove selected[VALUE_AI_INTERNAL_TOP_K];
-    int count;
-    int search_count;
-    int i;
-
-    if (stats != NULL) {
-        stats->nodes++;
-    }
-
-    if (depth <= 0 || state->status != GUNGI_STATUS_ONGOING) {
-        if (stats != NULL) {
-            stats->leaves++;
-        }
-        return value_leaf_score(model, state);
-    }
-
-    count = order_moves_by_value(state, model, ordered, GUNGI_MAX_LEGAL_MOVES);
-    if (count == 0) {
-        if (stats != NULL) {
-            stats->leaves++;
-        }
-        return value_leaf_score(model, state);
-    }
-
-    search_count = select_value_search_moves(ordered, count, selected, top_k, NULL, NULL);
-    if (search_count == 0) {
-        if (stats != NULL) {
-            stats->leaves++;
-        }
-        return value_leaf_score(model, state);
-    }
-
-    if (state->current_player == GUNGI_PLAYER_BLACK) {
-        int max_eval = -INT_MAX;
-        for (i = 0; i < search_count; ++i) {
-            GameState next_state = *state;
-            if (!gungi_apply_move(&next_state, selected[i].move).ok) {
-                continue;
-            }
-            {
-                int eval = value_minimax(&next_state, model, depth - 1, alpha, beta, top_k, stats);
-                if (eval > max_eval) {
-                    max_eval = eval;
-                }
-                if (eval > alpha) {
-                    alpha = eval;
-                }
-                if (beta <= alpha) {
-                    if (stats != NULL) {
-                        stats->cutoffs++;
-                    }
-                    break;
-                }
-            }
-        }
-        return max_eval;
-    } else {
-        int min_eval = INT_MAX;
-        for (i = 0; i < search_count; ++i) {
-            GameState next_state = *state;
-            if (!gungi_apply_move(&next_state, selected[i].move).ok) {
-                continue;
-            }
-            {
-                int eval = value_minimax(&next_state, model, depth - 1, alpha, beta, top_k, stats);
-                if (eval < min_eval) {
-                    min_eval = eval;
-                }
-                if (eval < beta) {
-                    beta = eval;
-                }
-                if (beta <= alpha) {
-                    if (stats != NULL) {
-                        stats->cutoffs++;
-                    }
-                    break;
-                }
-            }
-        }
-        return min_eval;
+        return minEval;
     }
 }
 
@@ -597,144 +277,54 @@ Move gungi_get_ai_move(const GameState *state, int depth)
     Move moves[GUNGI_MAX_LEGAL_MOVES];
     int count = gungi_generate_legal_moves(state, moves, GUNGI_MAX_LEGAL_MOVES);
     int is_black_turn;
-    int best_eval;
-    Move best_move;
-    int i;
+    int bestEval;
+    Move bestMove;
 
-    if (state == NULL || count == 0) {
-        return gungi_make_resign(state != NULL ? state->current_player : GUNGI_PLAYER_BLACK);
-    }
-
-    if (depth < 1) {
-        depth = 1;
+    if (count == 0) {
+        return gungi_make_resign(state->current_player);
     }
 
     is_black_turn = state->current_player == GUNGI_PLAYER_BLACK;
-    best_eval = is_black_turn ? -INT_MAX : INT_MAX;
-    best_move = moves[0];
+    bestEval = is_black_turn ? -INT_MAX : INT_MAX;
+    bestMove = moves[0];
 
 #pragma omp parallel for
-    for (i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++) {
         GameState next_state = *state;
         int eval;
-        if (!gungi_apply_move(&next_state, moves[i]).ok) {
-            continue;
-        }
+        gungi_apply_move(&next_state, moves[i]);
 
-        eval = minimax_heuristic(&next_state, depth - 1, -INT_MAX, INT_MAX);
+        eval = minimax(&next_state, depth - 1, -INT_MAX, INT_MAX, state->current_player == GUNGI_PLAYER_WHITE);
 
 #pragma omp critical
         {
             if (is_black_turn) {
-                if (eval > best_eval) {
-                    best_eval = eval;
-                    best_move = moves[i];
+                if (eval > bestEval) {
+                    bestEval = eval;
+                    bestMove = moves[i];
                 }
             } else {
-                if (eval < best_eval) {
-                    best_eval = eval;
-                    best_move = moves[i];
+                if (eval < bestEval) {
+                    bestEval = eval;
+                    bestMove = moves[i];
                 }
             }
         }
     }
 
-    return best_move;
+    return bestMove;
 }
 
 Move gungi_get_random_move(const GameState *state)
 {
     Move moves[GUNGI_MAX_LEGAL_MOVES];
     int count = gungi_generate_legal_moves(state, moves, GUNGI_MAX_LEGAL_MOVES);
+    int random_index;
 
-    if (state == NULL || count == 0) {
-        return gungi_make_resign(state != NULL ? state->current_player : GUNGI_PLAYER_BLACK);
-    }
-
-    return moves[rand() % count];
-}
-
-Move gungi_get_value_ai_move(const GameState *state,
-                             const GungiValueModel *model,
-                             int depth,
-                             int top_k,
-                             GungiAiSearchStats *stats)
-{
-    ScoredMove ordered[GUNGI_MAX_LEGAL_MOVES];
-    ScoredMove selected[VALUE_AI_INTERNAL_TOP_K];
-    int count;
-    int search_count;
-    int tactical_available = 0;
-    int tactical_selected = 0;
-    int is_black_turn;
-    int best_eval;
-    Move best_move;
-    int i;
-
-    if (stats != NULL) {
-        gungi_ai_stats_clear(stats);
-    }
-
-    if (state == NULL) {
-        return gungi_make_resign(GUNGI_PLAYER_BLACK);
-    }
-    if (!gungi_value_model_loaded(model)) {
-        return gungi_get_ai_move(state, 2);
-    }
-    if (depth < 1) {
-        depth = GUNGI_VALUE_AI_DEFAULT_DEPTH;
-    }
-    if (top_k <= 0 || top_k > GUNGI_MAX_LEGAL_MOVES) {
-        top_k = GUNGI_VALUE_AI_DEFAULT_TOP_K;
-    }
-
-    count = order_moves_by_value(state, model, ordered, GUNGI_MAX_LEGAL_MOVES);
     if (count == 0) {
         return gungi_make_resign(state->current_player);
     }
 
-    search_count = select_value_search_moves(ordered,
-                                             count,
-                                             selected,
-                                             top_k,
-                                             &tactical_available,
-                                             &tactical_selected);
-    if (search_count == 0) {
-        return gungi_make_resign(state->current_player);
-    }
-
-    if (stats != NULL) {
-        stats->root_moves = count;
-        stats->searched_root_moves = search_count;
-        stats->pruned_root_moves = count - search_count;
-        stats->tactical_root_moves = tactical_available;
-        stats->searched_tactical_root_moves = tactical_selected;
-    }
-
-    is_black_turn = state->current_player == GUNGI_PLAYER_BLACK;
-    best_eval = is_black_turn ? -INT_MAX : INT_MAX;
-    best_move = selected[0].move;
-
-    for (i = 0; i < search_count; ++i) {
-        GameState next_state = *state;
-        if (!gungi_apply_move(&next_state, selected[i].move).ok) {
-            continue;
-        }
-        {
-            int eval = value_minimax(&next_state, model, depth - 1, -INT_MAX, INT_MAX, top_k, stats);
-            if (is_black_turn) {
-                if (eval > best_eval) {
-                    best_eval = eval;
-                    best_move = selected[i].move;
-                }
-            } else {
-                if (eval < best_eval) {
-                    best_eval = eval;
-                    best_move = selected[i].move;
-                }
-            }
-        }
-    }
-
-    return best_move;
+    random_index = rand() % count;
+    return moves[random_index];
 }

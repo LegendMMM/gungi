@@ -3,10 +3,15 @@
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #include "raylib.h"
 #include "gungi_rules.h"
 #include "ai_core.h"
+#include "q_model.h"
+#include "q_search.h"
 
 #define WINDOW_WIDTH 1180
 #define WINDOW_HEIGHT 790
@@ -19,6 +24,26 @@
 #define TARGET_CAPTURE 2
 #define TARGET_STACK 4
 #define CONTROL_BUTTON_COUNT 5
+#define GUNGI_GAME_DEFAULT_MODEL_PATH "models/v_weights_hybrid_student_50000.bin"
+#define GUNGI_GAME_HYBRID_DEPTH 2
+
+static void ConfigureAiThreads(void)
+{
+#ifdef _OPENMP
+    int thread_count = omp_get_num_procs();
+    if (thread_count < 1) {
+        thread_count = 1;
+    }
+    omp_set_dynamic(0);
+    omp_set_num_threads(thread_count);
+#endif
+}
+
+static const char *ResolveQModelPath(void)
+{
+    const char *path = getenv(GUNGI_Q_MODEL_ENV);
+    return (path != NULL && path[0] != '\0') ? path : GUNGI_GAME_DEFAULT_MODEL_PATH;
+}
 
 typedef unsigned char UiTargetFlags;
 
@@ -42,7 +67,7 @@ typedef enum PlayerControlType {
     CONTROL_RANDOM_AI = 1,
     CONTROL_GREEDY_AI = 2,
     CONTROL_MINIMAX_AI = 3,
-    CONTROL_VALUE_AI = 4
+    CONTROL_Q_AI = 4
 } PlayerControlType;
 
 typedef struct AppState {
@@ -75,8 +100,8 @@ typedef struct AppState {
     PlayerControlType white_control;
     Rectangle black_ctrl_btns[CONTROL_BUTTON_COUNT];
     Rectangle white_ctrl_btns[CONTROL_BUTTON_COUNT];
-    GungiValueModel value_model;
-    bool value_model_loaded;
+    GungiQModel q_model;
+    bool q_model_loaded;
 
     double black_ai_time;
     int black_ai_moves;
@@ -133,13 +158,13 @@ static const char *ControlName(PlayerControlType control)
     case CONTROL_MANUAL:
         return "Manual";
     case CONTROL_RANDOM_AI:
-        return "Random";
+        return "Random AI";
     case CONTROL_GREEDY_AI:
-        return "Greedy";
+        return "Greedy AI";
     case CONTROL_MINIMAX_AI:
-        return "Minimax";
-    case CONTROL_VALUE_AI:
-        return "Value-Minimax";
+        return "Minimax AI";
+    case CONTROL_Q_AI:
+        return "Hybrid AI";
     default:
         return "Manual";
     }
@@ -561,16 +586,19 @@ static void DrawHandPanel(AppState *state, GungiPlayer player, Rectangle panel)
         DrawText("No pieces", (int)(panel.x + 14.0f), (int)(panel.y + 58.0f), 18, COLOR_MUTED);
     }
 
-    const char *ctrl_labels[CONTROL_BUTTON_COUNT] = { "M", "0", "1", "2", "V" };
+    const char *ctrl_labels[CONTROL_BUTTON_COUNT] = { "M", "R", "G", "Min", "Hy" };
     PlayerControlType current_ctrl = (player == GUNGI_PLAYER_BLACK) ? state->black_control : state->white_control;
     Rectangle *btns = (player == GUNGI_PLAYER_BLACK) ? state->black_ctrl_btns : state->white_ctrl_btns;
 
     for (int i = 0; i < CONTROL_BUTTON_COUNT; i++) {
         if (DrawButton(btns[i], ctrl_labels[i], current_ctrl == (PlayerControlType)i, COLOR_ACCENT)) {
-            PlayerControlType selected = (PlayerControlType)i;
-            if (player == GUNGI_PLAYER_BLACK) state->black_control = selected;
-            else state->white_control = selected;
-            SetMessage(state, TextFormat("%s control: %s", PlayerName(player), ControlName(selected)));
+            if (player == GUNGI_PLAYER_BLACK) {
+                state->black_control = (PlayerControlType)i;
+            } else {
+                state->white_control = (PlayerControlType)i;
+            }
+            ClearSelection(state);
+            SetMessage(state, TextFormat("%s control: %s", PlayerName(player), ControlName((PlayerControlType)i)));
         }
     }
 
@@ -672,12 +700,10 @@ static void DrawStatus(const AppState *state)
     }
 
     char prompt[256];
-    snprintf(prompt,
-             sizeof(prompt),
-             "Operation: %s | %s | Keys: N/M/C/S, R restart, Esc/X clear%s",
+    snprintf(prompt, sizeof(prompt), "Operation: %s | %s | Keys: N/M/C/S, R restart, Esc/X clear%s",
              ActionName(state->action),
              selection,
-             state->value_model_loaded ? "" : " | V missing: fallback to Minimax");
+             state->q_model_loaded ? "" : " | Hybrid model: missing, random fallback");
     DrawText(prompt,
              (int)(bar.x + 16.0f),
              (int)(bar.y + 31.0f),
@@ -883,6 +909,26 @@ static void SelectHandEntry(AppState *state, GungiPlayer player, int hand_index)
     SetMessage(state, TextFormat("Selected hand slot %d. Choose a board cell.", hand_index + 1));
 }
 
+static bool HandleControlButtonClick(AppState *state, Vector2 mouse)
+{
+    for (int i = 0; i < CONTROL_BUTTON_COUNT; ++i) {
+        if (CheckCollisionPointRec(mouse, state->black_ctrl_btns[i])) {
+            state->black_control = (PlayerControlType)i;
+            ClearSelection(state);
+            SetMessage(state, TextFormat("Black control: %s", ControlName((PlayerControlType)i)));
+            return true;
+        }
+        if (CheckCollisionPointRec(mouse, state->white_ctrl_btns[i])) {
+            state->white_control = (PlayerControlType)i;
+            ClearSelection(state);
+            SetMessage(state, TextFormat("White control: %s", ControlName((PlayerControlType)i)));
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static void HandleKeyboard(AppState *state)
 {
     if (IsKeyPressed(KEY_N)) {
@@ -942,6 +988,10 @@ static void HandleMouse(AppState *state)
     int hand_index = -1;
     int x = -1;
     int y = -1;
+
+    if (HandleControlButtonClick(state, mouse)) {
+        return;
+    }
 
     if (PointToHandEntry(state, mouse, GUNGI_PLAYER_BLACK, &hand_index)) {
         SelectHandEntry(state, GUNGI_PLAYER_BLACK, hand_index);
@@ -1051,7 +1101,7 @@ static void RunAutoBenchmark() {
     printf("\n==========================================\n");
     printf("          Benchmark Complete!             \n");
     printf("==========================================\n");
-    printf("Black (Depth 1) Wins : %d (%.1f%%)\n", black_wins, (float)black_wins/total_matches*100);
+    printf("Black (Depth 2) Wins : %d (%.1f%%)\n", black_wins, (float)black_wins/total_matches*100);
     printf("White (Depth 2) Wins : %d (%.1f%%)\n", white_wins, (float)white_wins/total_matches*100);
     printf("Draws / Timeouts     : %d (%.1f%%)\n", draws, (float)draws/total_matches*100);
     printf("------------------------------------------\n");
@@ -1065,6 +1115,7 @@ int main(void)
     return 0; // 測試完直接退出，不開啟 Raylib 視窗！
     */
 
+    ConfigureAiThreads();
     srand((unsigned int)time(NULL));
     
     static AppState state;
@@ -1072,16 +1123,16 @@ int main(void)
     state.action = GUNGI_ACTION_MOVE;
     ClearSelection(&state);
     LayoutApp(&state);
-    const char *value_model_path = gungi_value_resolve_model_path();
-    gungi_value_init(&state.value_model);
-    state.value_model_loaded = gungi_value_load(&state.value_model, value_model_path) != 0;
+    const char *q_model_path = ResolveQModelPath();
+    gungi_q_init(&state.q_model);
+    state.q_model_loaded = gungi_q_load(&state.q_model, q_model_path) != 0;
 
     state.game = gungi_create();
     RefreshView(&state);
     SetMessage(&state,
-               state.value_model_loaded
-                   ? TextFormat("Value model loaded: %s", value_model_path)
-                   : TextFormat("Value model missing: %s; V mode falls back to Minimax.", value_model_path));
+               state.q_model_loaded
+                   ? TextFormat("Hybrid model loaded: %s", q_model_path)
+                   : TextFormat("Hybrid model not loaded: %s; Hybrid AI uses random fallback.", q_model_path));
 
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Gungi raylib");
     SetTargetFPS(60);
@@ -1108,17 +1159,12 @@ int main(void)
                     if (current_ctrl == CONTROL_RANDOM_AI) {
                         next_move = gungi_get_random_move(internal_state);
                     } else if (current_ctrl == CONTROL_GREEDY_AI) {
-                        next_move = gungi_get_ai_move(internal_state, 1);
+                        next_move = gungi_get_ai_move(internal_state, 2);
                     } else if (current_ctrl == CONTROL_MINIMAX_AI) {
                         next_move = gungi_get_ai_move(internal_state, 2);
-                    } else if (current_ctrl == CONTROL_VALUE_AI) {
-                        next_move = state.value_model_loaded
-                                        ? gungi_get_value_ai_move(internal_state,
-                                                                 &state.value_model,
-                                                                 GUNGI_VALUE_AI_DEFAULT_DEPTH,
-                                                                 GUNGI_VALUE_AI_DEFAULT_TOP_K,
-                                                                 NULL)
-                                        : gungi_get_ai_move(internal_state, 2);
+                    } else if (current_ctrl == CONTROL_Q_AI) {
+                        next_move = state.q_model_loaded ? gungi_get_hybrid_ai_move(internal_state, &state.q_model, GUNGI_GAME_HYBRID_DEPTH, NULL)
+                                                         : gungi_get_random_move(internal_state);
                     } else {
                         continue;
                     }
