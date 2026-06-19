@@ -2,6 +2,12 @@
 
 這是一個 C99 + raylib 的軍儀棋第一版實作。規則核心在 `src/gungi_rules.c` / `src/gungi_rules.h`，raylib 畫面在 `src/main.c`，核心測試在 `tests/test_rules.c`。
 
+## 專案索引
+
+- `docs/repo_map.md`：目前 repo 結構、工具、模型與實驗產物整理。
+- `docs/vp_gpu_pipeline.md`：VP value+policy GPU 訓練流程。
+- `analysis_reports/`：正式訓練、評估與 anti-draw 實驗結論。
+
 ## 最簡單玩法
 
 一般玩家請到 GitHub Releases 下載 `gungi.exe`，直接雙擊執行即可：
