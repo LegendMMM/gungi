@@ -2,6 +2,12 @@
 
 這是一個 C99 + raylib 的軍儀棋第一版實作。規則核心在 `src/gungi_rules.c` / `src/gungi_rules.h`，raylib 畫面在 `src/main.c`，核心測試在 `tests/test_rules.c`。
 
+## 專案索引
+
+- `docs/repo_map.md`：目前 repo 結構、工具、模型與實驗產物整理。
+- `docs/vp_gpu_pipeline.md`：VP value+policy GPU 訓練流程。
+- `analysis_reports/`：正式訓練、評估與 anti-draw 實驗結論。
+
 ## 最簡單玩法
 
 一般玩家請到 GitHub Releases 下載 `gungi.exe`，直接雙擊執行即可：
@@ -59,6 +65,49 @@ build.bat
 
 - `gungi.exe`
 - `tests\test_rules.exe`
+- `tools\train_q.exe`
+
+## Q AI 與模型切換
+
+遊戲啟動時預設會載入：
+
+```text
+models\v_weights.bin
+```
+
+進入遊戲後，在 Black hand 或 White hand 面板下方選 `Q`，該方就會使用 Q model 出手。如果模型不存在或格式不相容，Q 模式會自動改用 random fallback，畫面狀態列也會提示。
+
+要切換成其他模型，不需要改程式；啟動前設定 `GUNGI_Q_MODEL` 即可。
+
+PowerShell：
+
+```powershell
+$env:GUNGI_Q_MODEL = "models\v_weights_test.bin"
+.\gungi.exe
+```
+
+cmd：
+
+```bat
+set GUNGI_Q_MODEL=models\v_weights_test.bin
+gungi.exe
+```
+
+要切回預設模型，關掉視窗後清掉環境變數，或直接開新的終端機再執行 `gungi.exe`。
+
+訓練工具也使用同一個 `GUNGI_Q_MODEL` 變數決定輸出的模型檔；沒有設定時會覆寫預設的 `models\v_weights.bin`。
+
+```powershell
+$env:GUNGI_Q_MODEL = "models\v_weights_test.bin"
+$env:GUNGI_Q_TRACE = "train_test_trace.csv"
+.\tools\train_q.exe 2000
+```
+
+如果只想訓練預設模型：
+
+```bat
+tools\train_q.exe 2000
+```
 
 ## 操作
 
@@ -66,6 +115,7 @@ build.bat
 - 選 `New` 後點手駒，再點棋盤格放置手駒。
 - 點目前回合玩家的棋子後，棋盤會提示可移動位置；點另一顆己方棋子會切換提示。
 - 點空格會移動，點敵方棋子會吃子；按 `S` 後點可疊目標可執行 `Stack`。
+- 面板下方控制按鈕：`M` 手動、`R` 隨機 AI、`G` greedy、`Min` minimax、`Q` Q model。
 - 快捷鍵：`N` New、`M` Move、`C` Capture、`S` Stack、`R` Restart、`Esc` / `X` 清除選取。
 - `Restart` 重新開局，`Resign` 由目前回合玩家投降。
 
@@ -73,5 +123,5 @@ build.bat
 
 - 使用固定預設布陣，不含完整輪流初始布陣階段。
 - 已有 check 偵測與禁止自陷入 check，但尚未做完整 checkmate 搜尋。
-- Captain turncoat、AI、線上對戰、存檔讀檔與美術素材不在第一版範圍。
+- Captain turncoat、線上對戰、存檔讀檔與美術素材不在第一版範圍。
 - 棋子以 ASCII 代號顯示，不載入 CJK 字型。

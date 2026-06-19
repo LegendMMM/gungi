@@ -1,0 +1,17 @@
+{
+  "name": "vp_antidraw_side_v1black_a005white",
+  "mode": "vp-side-hybrid",
+  "description": "Side-aware anti-draw VP hybrid: V1 value head, V1 policy ordering for black, alpha 0.05 anti-draw blend policy ordering for white.",
+  "value_model": "models/vp_hybrid_student_100000.bin",
+  "black_policy_model": "models/vp_hybrid_student_100000.bin",
+  "white_policy_model": "models/vp_antidraw_blend_a005.bin",
+  "base_model": "models/vp_hybrid_student_100000.bin",
+  "aux_model": "models/vp_resolution_v2a_10000.bin",
+  "white_policy_alpha": 0.05,
+  "value_source": "base",
+  "policy_scale": 1.0,
+  "search_depth": 2,
+  "evaluation_seed": 626262,
+  "primary_600ply_csv": "antidraw_side_v1black_a005white_hybrid_vs_minimax2_600ply_40x.csv",
+  "primary_1000ply_csv": "antidraw_side_v1black_a005white_hybrid_vs_minimax2_1000ply_40x.csv"
+}

@@ -8,12 +8,14 @@ if defined RAYLIB_PATH (
     set "RAYLIB_DIR=C:\raylib\raylib"
 )
 
-set "GCC=gcc"
-where gcc >nul 2>nul
-if errorlevel 1 (
-    if exist "%RAYLIB_DIR%\..\w64devkit\bin\gcc.exe" (
-        set "GCC=%RAYLIB_DIR%\..\w64devkit\bin\gcc.exe"
-    ) else (
+set "W64DEVKIT_BIN=%RAYLIB_DIR%\..\w64devkit\bin"
+if exist "%W64DEVKIT_BIN%\gcc.exe" (
+    set "GCC=%W64DEVKIT_BIN%\gcc.exe"
+    set "PATH=%W64DEVKIT_BIN%;%PATH%"
+) else (
+    set "GCC=gcc"
+    where gcc >nul 2>nul
+    if errorlevel 1 (
         echo [error] gcc was not found.
         echo         Install the raylib Windows package and add C:\raylib\w64devkit\bin to PATH,
         echo         or install another MinGW-w64 gcc and make sure gcc is available.
@@ -52,22 +54,71 @@ if not exist "%ROOT%tests\test_rules.c" (
 )
 
 if not exist "%ROOT%tests" mkdir "%ROOT%tests"
+if not exist "%ROOT%tools" mkdir "%ROOT%tools"
 
 echo Building gungi.exe...
-"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%RAYLIB_DIR%\src" -I"%ROOT%src" "%ROOT%src\ai_core.c" "%ROOT%src\main.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%gungi.exe" -L"%RAYLIB_DIR%\src" -lraylib -lopengl32 -lgdi32 -lwinmm -fopenmp
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%RAYLIB_DIR%\src" -I"%ROOT%src" "%ROOT%src\ai_core.c" "%ROOT%src\q_search.c" "%ROOT%src\q_model.c" "%ROOT%src\vp_model.c" "%ROOT%src\main.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%gungi.exe" -L"%RAYLIB_DIR%\src" -lraylib -lopengl32 -lgdi32 -lwinmm -lm -fopenmp
 if errorlevel 1 (
     echo [error] Failed to build gungi.exe.
     exit /b 1
 )
 
 echo Building tests\test_rules.exe...
-"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tests\test_rules.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tests\test_rules.exe"
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tests\test_rules.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tests\test_rules.exe" -lm -fopenmp
 if errorlevel 1 (
     echo [error] Failed to build tests\test_rules.exe.
+    exit /b 1
+)
+
+echo Building tests\test_vp_model.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tests\test_vp_model.c" "%ROOT%src\vp_model.c" "%ROOT%src\q_search.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tests\test_vp_model.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tests\test_vp_model.exe.
+    exit /b 1
+)
+
+echo Building tools\train_q.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\train_q.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\train_q.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\train_q.exe.
+    exit /b 1
+)
+
+echo Building tools\train_vp_from_hybrid.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\train_vp_from_hybrid.c" "%ROOT%src\vp_model.c" "%ROOT%src\q_search.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\train_vp_from_hybrid.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\train_vp_from_hybrid.exe.
+    exit /b 1
+)
+
+echo Building tools\compare_model_minimax.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\compare_model_minimax.c" "%ROOT%src\vp_model.c" "%ROOT%src\q_search.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\compare_model_minimax.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\compare_model_minimax.exe.
+    exit /b 1
+)
+
+echo Building tools\generate_resolution_dataset.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\generate_resolution_dataset.c" "%ROOT%src\vp_model.c" "%ROOT%src\q_search.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\generate_resolution_dataset.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\generate_resolution_dataset.exe.
+    exit /b 1
+)
+
+echo Building tools\eval_q.exe...
+"%GCC%" -O3 -fopenmp -std=c99 -Wall -Wextra -pedantic -I"%ROOT%src" "%ROOT%tools\eval_q.c" "%ROOT%src\q_model.c" "%ROOT%src\ai_core.c" "%ROOT%src\gungi_rules.c" -o "%ROOT%tools\eval_q.exe" -lm -fopenmp
+if errorlevel 1 (
+    echo [error] Failed to build tools\eval_q.exe.
     exit /b 1
 )
 
 echo Build completed:
 echo   %ROOT%gungi.exe
 echo   %ROOT%tests\test_rules.exe
+echo   %ROOT%tests\test_vp_model.exe
+echo   %ROOT%tools\train_q.exe
+echo   %ROOT%tools\train_vp_from_hybrid.exe
+echo   %ROOT%tools\compare_model_minimax.exe
+echo   %ROOT%tools\generate_resolution_dataset.exe
+echo   %ROOT%tools\eval_q.exe
 exit /b 0

@@ -1,0 +1,23 @@
+Game 1/20 | seed 1 | value black | status resigned | winner white | ply 845
+Game 2/20 | seed 1 | value white | status resigned | winner white | ply 2301
+Game 3/20 | seed 1 | value black | status ongoing | winner none | ply 3000
+Game 4/20 | seed 1 | value white | status ongoing | winner none | ply 3000
+Game 5/20 | seed 1 | value black | status resigned | winner white | ply 2638
+Game 6/20 | seed 1 | value white | status resigned | winner white | ply 1596
+Game 7/20 | seed 1000004 | value black | status resigned | winner black | ply 2239
+Game 8/20 | seed 1000004 | value white | status resigned | winner white | ply 1248
+Game 9/20 | seed 1000004 | value black | status resigned | winner black | ply 184
+Game 10/20 | seed 1000004 | value white | status resigned | winner white | ply 409
+Game 11/20 | seed 1000004 | value black | status ongoing | winner none | ply 3000
+Game 12/20 | seed 1000004 | value white | status resigned | winner black | ply 39
+Game 13/20 | seed 2000007 | value black | status ongoing | winner none | ply 3000
+Game 14/20 | seed 2000007 | value white | status resigned | winner black | ply 1540
+Game 15/20 | seed 2000007 | value black | status resigned | winner white | ply 70
+Game 16/20 | seed 2000007 | value white | status resigned | winner white | ply 1830
+Game 17/20 | seed 3000010 | value black | status resigned | winner white | ply 2824
+Game 18/20 | seed 3000010 | value white | status resigned | winner white | ply 1066
+Game 19/20 | seed 3000010 | value black | status resigned | winner black | ply 498
+Game 20/20 | seed 3000010 | value white | status resigned | winner white | ply 65
+Value wins: 10 | Old wins: 6 | Draws: 4 | Timeouts: 4
+Avg value think: 0.005384 s | Avg old think: 0.002843 s
+Total value nodes: 2312103 | Total root pruned: 802898 | logs value_ai_eval_v2_20k_long.csv / value_ai_eval_v2_20k_long_summary.csv

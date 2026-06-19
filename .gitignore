@@ -4,6 +4,8 @@
 *.pdb
 *.ilk
 *.csv
+*.log
+*.samples.bin
 
 gungi.exe
 tests/test_rules.exe
@@ -13,5 +15,7 @@ tests/test_rules
 build/
 out/
 .deps/
+.venv-gpu/
+__pycache__/
 .vs/
 .vscode/

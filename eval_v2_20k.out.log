@@ -1,0 +1,43 @@
+Game 1/40 | seed 1 | value black | status ongoing | winner none | ply 400
+Game 2/40 | seed 1 | value white | status ongoing | winner none | ply 400
+Game 3/40 | seed 1 | value black | status ongoing | winner none | ply 400
+Game 4/40 | seed 1 | value white | status ongoing | winner none | ply 400
+Game 5/40 | seed 1 | value black | status resigned | winner white | ply 74
+Game 6/40 | seed 1 | value white | status resigned | winner white | ply 338
+Game 7/40 | seed 1 | value black | status resigned | winner white | ply 93
+Game 8/40 | seed 1 | value white | status resigned | winner black | ply 10
+Game 9/40 | seed 1 | value black | status ongoing | winner none | ply 400
+Game 10/40 | seed 1 | value white | status resigned | winner white | ply 362
+Game 11/40 | seed 1000004 | value black | status resigned | winner black | ply 225
+Game 12/40 | seed 1000004 | value white | status ongoing | winner none | ply 400
+Game 13/40 | seed 1000004 | value black | status resigned | winner black | ply 320
+Game 14/40 | seed 1000004 | value white | status ongoing | winner none | ply 400
+Game 15/40 | seed 1000004 | value black | status resigned | winner white | ply 198
+Game 16/40 | seed 1000004 | value white | status ongoing | winner none | ply 400
+Game 17/40 | seed 1000004 | value black | status resigned | winner black | ply 309
+Game 18/40 | seed 1000004 | value white | status resigned | winner black | ply 9
+Game 19/40 | seed 1000004 | value black | status resigned | winner black | ply 394
+Game 20/40 | seed 1000004 | value white | status resigned | winner black | ply 204
+Game 21/40 | seed 2000007 | value black | status resigned | winner white | ply 189
+Game 22/40 | seed 2000007 | value white | status ongoing | winner none | ply 400
+Game 23/40 | seed 2000007 | value black | status ongoing | winner none | ply 400
+Game 24/40 | seed 2000007 | value white | status ongoing | winner none | ply 400
+Game 25/40 | seed 2000007 | value black | status resigned | winner white | ply 89
+Game 26/40 | seed 2000007 | value white | status ongoing | winner none | ply 400
+Game 27/40 | seed 2000007 | value black | status ongoing | winner none | ply 400
+Game 28/40 | seed 2000007 | value white | status resigned | winner black | ply 10
+Game 29/40 | seed 2000007 | value black | status ongoing | winner none | ply 400
+Game 30/40 | seed 2000007 | value white | status resigned | winner black | ply 10
+Game 31/40 | seed 3000010 | value black | status ongoing | winner none | ply 400
+Game 32/40 | seed 3000010 | value white | status ongoing | winner none | ply 400
+Game 33/40 | seed 3000010 | value black | status resigned | winner white | ply 65
+Game 34/40 | seed 3000010 | value white | status resigned | winner white | ply 65
+Game 35/40 | seed 3000010 | value black | status resigned | winner white | ply 281
+Game 36/40 | seed 3000010 | value white | status ongoing | winner none | ply 400
+Game 37/40 | seed 3000010 | value black | status ongoing | winner none | ply 400
+Game 38/40 | seed 3000010 | value white | status ongoing | winner none | ply 400
+Game 39/40 | seed 3000010 | value black | status resigned | winner white | ply 96
+Game 40/40 | seed 3000010 | value white | status ongoing | winner none | ply 400
+Value wins: 7 | Old wins: 13 | Draws: 20 | Timeouts: 20
+Avg value think: 0.011317 s | Avg old think: 0.007347 s
+Total value nodes: 855123 | Total root pruned: 379973 | logs value_ai_eval_v2_20k.csv / value_ai_eval_v2_20k_summary.csv

@@ -1,0 +1,6 @@
+run_timestamp,model_version,feature_count,data_path,model_path,rows,train_rows,val_rows,epochs,learning_rate,l2,epoch,train_mse,val_mse
+1780346909,2,192,value_data_v2_smoke.csv,models\value_weights_v2_smoke.bin,1000,900,100,5,0.01000000,0.0000100000,1,0.49793106,0.46929580
+1780346909,2,192,value_data_v2_smoke.csv,models\value_weights_v2_smoke.bin,1000,900,100,5,0.01000000,0.0000100000,2,0.42611933,0.46655864
+1780346909,2,192,value_data_v2_smoke.csv,models\value_weights_v2_smoke.bin,1000,900,100,5,0.01000000,0.0000100000,3,0.40343413,0.38500625
+1780346909,2,192,value_data_v2_smoke.csv,models\value_weights_v2_smoke.bin,1000,900,100,5,0.01000000,0.0000100000,4,0.34799439,0.37143505
+1780346909,2,192,value_data_v2_smoke.csv,models\value_weights_v2_smoke.bin,1000,900,100,5,0.01000000,0.0000100000,5,0.32819489,0.32234451

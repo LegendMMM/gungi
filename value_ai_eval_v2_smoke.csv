@@ -1,0 +1,7 @@
+seed_index,seed,game,opening_id,opening_ply_requested,opening_ply_applied,opening_hash,value_player,status,winner,ply,timeout,depth,top_k,value_time,old_time,value_moves,old_moves,value_nodes,value_leaves,value_cutoffs,value_root_moves,value_searched_root,value_pruned_root,value_tactical_root,value_searched_tactical_root
+1,3,1,1,4,4,10798815644515920950,black,resigned,black,44,0,2,12,0.363000,0.497000,22,22,3106,2845,0,4497,264,4233,92,62
+1,3,2,1,4,4,10798815644515920950,white,resigned,black,72,0,2,12,0.714000,0.976000,36,36,4498,4152,0,3783,346,3437,40,38
+1,3,3,2,4,4,2381286322635379173,black,ongoing,none,80,1,2,12,0.740000,0.892000,40,40,6069,5600,0,7703,469,7234,32,32
+1,3,4,2,4,4,2381286322635379173,white,resigned,white,47,0,2,12,0.466000,0.543000,23,24,3519,3244,0,3300,276,3024,45,43
+2,1000006,5,3,4,4,5520971104336349789,black,ongoing,none,80,1,2,12,1.139000,1.996000,40,40,5902,5448,0,7793,454,7339,22,18
+2,1000006,6,3,4,4,5520971104336349789,white,ongoing,none,80,1,2,12,0.866000,0.910000,40,40,6033,5568,0,4606,465,4141,101,97

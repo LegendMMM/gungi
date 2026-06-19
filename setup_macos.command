@@ -44,7 +44,7 @@ clang -O3 -std=c99 -Wall -Wextra -pedantic \
 
 clang -O3 -std=c99 -Wall -Wextra -pedantic \
   -Isrc -I"$RAYLIB_DIR/src" \
-  src/ai_core.c src/main.c src/gungi_rules.c "$RAYLIB_LIB" \
+  src/ai_core.c src/q_search.c src/q_model.c src/main.c src/gungi_rules.c "$RAYLIB_LIB" \
   -framework OpenGL -framework Cocoa -framework IOKit -framework CoreVideo \
   -o gungi
 
